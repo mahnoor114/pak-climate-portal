@@ -597,8 +597,8 @@ function windAt(lat,lon,level){
  return [bl(g.u),bl(g.v)];
 }
 const WIND_RAMP=[[0,[20,40,110]],[.2,[30,120,190]],[.4,[40,190,170]],[.6,[150,210,70]],[.75,[250,200,50]],[.9,[240,90,60]],[1,[200,50,160]]];
-function windColor(s){
- const t=Math.min(1,s/(wind.level===250?80:50));
+function windColor(s,level){
+ const t=Math.min(1,s/((level||wind.level)==250?80:50));
  for(let i=1;i<WIND_RAMP.length;i++)if(t<=WIND_RAMP[i][0]){
   const [t0,c0]=WIND_RAMP[i-1],[t1,c1]=WIND_RAMP[i],f=(t-t0)/(t1-t0);
   return c0.map((v,j)=>Math.round(v+(c1[j]-v)*f));
@@ -806,9 +806,60 @@ function mercatorToEquirect(src){
  octx.putImageData(od,0,0);
  return out;
 }
-function buildLive3(key){
+// ---- Wind on the 3D globe: the same GFS data and colours as the 2D wind layer (Western disturbances 500 hPa,
+// Jet stream 250 hPa), drawn as a world texture (longitude -180..180 left to right) wrapped on the globe. ----
+const W3={w:1024,h:512};
+function buildWind3(level){
  if(!t3)return;
+ if(!t3.wind){
+  const mk=()=>{const c=document.createElement('canvas');c.width=W3.w;c.height=W3.h;return c;};
+  const field=mk(),trails=mk(),comp=mk(),tex=new THREE.CanvasTexture(comp);
+  const mesh=new THREE.Mesh(new THREE.SphereGeometry(1.0045,96,96),new THREE.MeshBasicMaterial({map:tex,transparent:true,depthWrite:false}));
+  t3.earth.add(mesh);
+  t3.wind={field,trails,comp,tex,mesh,parts:[],level:null,frame:0};
+ }
+ const W=t3.wind;W.level=level;W.parts=[];W.mesh.visible=false;
+ fetchWind().then(()=>{
+  if(W.level!==level)return;
+  // speed colours: one sample per 4x4 block on a small canvas, smoothed up to full size
+  const sw=W3.w/4,sh=W3.h/4,small=document.createElement('canvas');small.width=sw;small.height=sh;
+  const sc=small.getContext('2d'),img=sc.createImageData(sw,sh),px=img.data;
+  for(let j=0;j<sh;j++)for(let i=0;i<sw;i++){
+   const lat=90-(j+.5)/sh*180,lon=-180+(i+.5)/sw*360,w=windAt(lat,lon,level);if(!w)continue;
+   const c=windColor(Math.hypot(w[0],w[1]),level),o=(j*sw+i)*4;px[o]=c[0];px[o+1]=c[1];px[o+2]=c[2];px[o+3]=150;
+  }
+  sc.putImageData(img,0,0);
+  const fc=W.field.getContext('2d');fc.clearRect(0,0,W3.w,W3.h);fc.imageSmoothingEnabled=true;fc.drawImage(small,0,0,W3.w,W3.h);
+  W.trails.getContext('2d').clearRect(0,0,W3.w,W3.h);
+  for(let n=0;n<3500;n++)W.parts.push(spawn3({}));
+  W.mesh.visible=true;
+ }).catch(()=>{if(W.level===level)toast('Wind data unavailable right now - try again later');});
+}
+function spawn3(p){p.lon=Math.random()*360-180;p.lat=Math.asin(Math.random()*2-1)*180/Math.PI;p.age=Math.random()*80|0;return p;}
+function stopWind3(){if(t3&&t3.wind){t3.wind.level=null;t3.wind.parts=[];t3.wind.mesh.visible=false;}}
+function windFrame3(){
+ const W=t3&&t3.wind;if(!W||!W.level||!W.parts.length)return;
+ const tc=W.trails.getContext('2d');
+ tc.globalCompositeOperation='destination-in';tc.fillStyle='rgba(0,0,0,.93)';tc.fillRect(0,0,W3.w,W3.h);
+ tc.globalCompositeOperation='source-over';tc.strokeStyle='rgba(255,255,255,.9)';tc.lineWidth=1.1;tc.beginPath();
+ const k=W.level===250?.0045:.007,X=lon=>(lon+180)/360*W3.w,Y=lat=>(90-lat)/180*W3.h;
+ W.parts.forEach(p=>{
+  const w=windAt(p.lat,p.lon,W.level);
+  if(!w||++p.age>100||Math.abs(p.lat)>84){spawn3(p);p.age=0;return;}
+  let lon=p.lon+w[0]*k/Math.max(.2,Math.cos(p.lat*Math.PI/180)),lat=p.lat+w[1]*k;
+  if(lon>180)lon-=360;if(lon<-180)lon+=360;
+  if(Math.abs(lon-p.lon)<180){tc.moveTo(X(p.lon),Y(p.lat));tc.lineTo(X(lon),Y(lat));}
+  p.lon=lon;p.lat=lat;
+ });
+ tc.stroke();
+ if(++W.frame%2)return; // upload the texture every other frame
+ const cc=W.comp.getContext('2d');cc.clearRect(0,0,W3.w,W3.h);cc.drawImage(W.field,0,0);cc.drawImage(W.trails,0,0);
+ W.tex.needsUpdate=true;
+}
+function buildLive3(key){ if(!t3)return;
  const s=sources[key];
+ if(s&&s.wind){if(t3.overlay)t3.overlay.visible=false;t3.liveKey=key;buildWind3(s.wind);return;}
+ stopWind3();
  if(!s||!s.gibs){if(t3.overlay)t3.overlay.visible=false;return;}
  t3.liveKey=key;
  const id=s.gibs[0],ext=s.gibs[1],lvl=s.gibs[2];
@@ -1445,7 +1496,7 @@ async function aiAskPuter(onText){
  return text;
 }
 
-(function animate(){requestAnimationFrame(animate);if(mode3d&&t3){if(!t3.drag)t3.earth.rotation.y+=.0016;t3.atmo.forEach(m=>m.material.color.lerp(t3.tint,.07));if(t3.hubGlow)t3.hubGlow.material.opacity=.55+.35*Math.sin(performance.now()*.004);updateLabels3d();t3.rd.render(t3.s,t3.cam)}})();
+(function animate(){requestAnimationFrame(animate);if(mode3d&&t3){if(!t3.drag)t3.earth.rotation.y+=.0016;t3.atmo.forEach(m=>m.material.color.lerp(t3.tint,.07));windFrame3();if(t3.hubGlow)t3.hubGlow.material.opacity=.55+.35*Math.sin(performance.now()*.004);updateLabels3d();t3.rd.render(t3.s,t3.cam)}})();
 </script>
 </body>
 </html>
