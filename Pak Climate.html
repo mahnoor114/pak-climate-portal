@@ -53,7 +53,8 @@
 .viewbtn{cursor:pointer;font-weight:800;letter-spacing:.5px;font-family:inherit}
 .viewbtn:hover{border-color:rgba(53,217,255,.45)}
 .viewbtn.on{background:rgba(53,217,255,.18);border-color:rgba(53,217,255,.65);color:#a5f0ff}
-#globe3d{position:absolute;inset:0;z-index:600;display:none;background:radial-gradient(1200px 800px at 50% 45%,#071527 0%,#030a12 70%)}
+@property --glow{syntax:'<color>';inherits:false;initial-value:#38bdf8}
+#globe3d{position:absolute;inset:0;z-index:600;display:none;--glow:#38bdf8;transition:--glow .6s ease;background:radial-gradient(closest-side at 50% 50%,color-mix(in srgb,var(--glow) 55%,#071527) 0%,color-mix(in srgb,var(--glow) 38%,#06101e) 62%,color-mix(in srgb,var(--glow) 18%,#040b16) 85%,color-mix(in srgb,var(--glow) 7%,#030a12) 100%),#030a12}
 #globe3d canvas{display:block}
 .windcv{position:absolute;left:0;top:0;z-index:450;pointer-events:none;display:none}
 .windcv.on{display:block}
@@ -834,7 +835,7 @@ function init3D(){
  host.style.touchAction='none';
  const s=new THREE.Scene();
  const cam=new THREE.PerspectiveCamera(42,innerWidth/innerHeight,.1,100);cam.position.set(0,0,3.1);
- const rd=new THREE.WebGLRenderer({antialias:true,alpha:true});rd.setPixelRatio(Math.min(devicePixelRatio,2));rd.setSize(innerWidth,innerHeight);rd.setClearColor(0x030a10,1);host.appendChild(rd.domElement);
+ const rd=new THREE.WebGLRenderer({antialias:true,alpha:true});rd.setPixelRatio(Math.min(devicePixelRatio,2));rd.setSize(innerWidth,innerHeight);rd.setClearColor(0x000000,0);host.appendChild(rd.domElement); // transparent: the tinted space background shows through
  const sg=new THREE.BufferGeometry(),sp=[];
  for(let i=0;i<900;i++){const v=new THREE.Vector3(Math.random()-.5,Math.random()-.5,Math.random()-.5).normalize().multiplyScalar(14+Math.random()*26);sp.push(v.x,v.y,v.z);}
  sg.setAttribute('position',new THREE.Float32BufferAttribute(sp,3));
@@ -847,8 +848,9 @@ function init3D(){
  else mat=new THREE.MeshBasicMaterial({color:0x0f4a63});
  earth.add(new THREE.Mesh(new THREE.SphereGeometry(1,128,128),mat));
  loadSatBase3(rd,mat);
- earth.add(new THREE.Mesh(new THREE.SphereGeometry(1.05,48,48),new THREE.MeshBasicMaterial({color:0x3ac0ff,transparent:true,opacity:.15,side:THREE.BackSide})));
- earth.add(new THREE.Mesh(new THREE.SphereGeometry(1.10,48,48),new THREE.MeshBasicMaterial({color:0x1e7fd0,transparent:true,opacity:.07,side:THREE.BackSide})));
+ const atmo=[new THREE.Mesh(new THREE.SphereGeometry(1.05,48,48),new THREE.MeshBasicMaterial({color:0x3ac0ff,transparent:true,opacity:.34,side:THREE.BackSide,blending:THREE.AdditiveBlending,depthWrite:false})),
+  new THREE.Mesh(new THREE.SphereGeometry(1.16,48,48),new THREE.MeshBasicMaterial({color:0x1e7fd0,transparent:true,opacity:.2,side:THREE.BackSide,blending:THREE.AdditiveBlending,depthWrite:false}))];
+ atmo.forEach(m=>earth.add(m));
  const gm=new THREE.LineBasicMaterial({color:0x49cce9,transparent:true,opacity:.15});
  for(let lat=-60;lat<=60;lat+=30){const p=[];for(let lon=0;lon<=360;lon+=5)p.push(latLonToV3(lat,lon,1.004));earth.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(p),gm));}
  for(let lon=0;lon<360;lon+=30){const p=[];for(let lat=-90;lat<=90;lat+=5)p.push(latLonToV3(lat,lon,1.004));earth.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(p),gm));}
@@ -876,7 +878,7 @@ function init3D(){
    };
    bi.src=BOUND_TEX;
   }
- t3={s,cam,rd,earth,markers,wrap:document.getElementById('label3dWrap'),labels:[],drag:false};
+ t3={s,cam,rd,earth,markers,atmo,tint:new THREE.Color(0x3ac0ff),wrap:document.getElementById('label3dWrap'),labels:[],drag:false};
  host.addEventListener('pointerdown',e=>{t3.drag=true;drag3={x:e.clientX,y:e.clientY};host.setPointerCapture(e.pointerId);});
  host.addEventListener('pointermove',e=>{if(!t3.drag||!drag3)return;earth.rotation.y+=(e.clientX-drag3.x)*.005;earth.rotation.x=Math.max(-1.1,Math.min(1.1,earth.rotation.x+(e.clientY-drag3.y)*.004));drag3={x:e.clientX,y:e.clientY};});
  host.addEventListener('pointerup',()=>{t3.drag=false;drag3=null;});
@@ -896,7 +898,7 @@ function setMode3d(v){
  if(v){
   if(!t3)init3D();
   else{t3.cam.aspect=innerWidth/innerHeight;t3.cam.updateProjectionMatrix();t3.rd.setSize(innerWidth,innerHeight);}
-  buildDriver3(active);
+  buildDriver3(active);globePreview=active;globeTint(active);
   buildLive3(active);
  }else if(typeof map!=='undefined'){map.invalidateSize();resetWind();}
 }
@@ -1199,6 +1201,23 @@ dvm.addEventListener('click',e=>{if(e.target===dvm)closeDriverCard();});
 addEventListener('keydown',e=>{if(e.key==='Escape')closeDriverCard();});
 
 document.querySelectorAll('.bottombar .layer').forEach(btn=>{const d=pts3d[btn.dataset.layer];if(d)btn.style.setProperty('--c',d.color);});
+function globeTint(key){
+ const c=(pts3d[key]||{}).color||ACCENT;
+ document.getElementById('globe3d').style.setProperty('--glow',c);
+ if(t3)t3.tint=new THREE.Color(c);
+}
+let globePreview=null;
+function globeHover(key){ // key = hovered driver, or null to go back to the selected one
+ if(!mode3d||!t3)return;
+ const k=key||active;if(k===globePreview)return;globePreview=k;
+ globeTint(k);buildDriver3(k);
+}
+document.querySelectorAll('.bottombar .layer').forEach(btn=>{
+ btn.addEventListener('mouseenter',()=>globeHover(btn.dataset.layer));
+ btn.addEventListener('focus',()=>globeHover(btn.dataset.layer));
+ btn.addEventListener('mouseleave',()=>globeHover(null));
+ btn.addEventListener('blur',()=>globeHover(null));
+});
 document.querySelectorAll('.bottombar .layer').forEach(btn=>btn.addEventListener('pointermove',e=>{const r=btn.getBoundingClientRect();btn.style.setProperty('--mx',((e.clientX-r.left)/r.width*100)+'%');btn.style.setProperty('--my',((e.clientY-r.top)/r.height*100)+'%');}));
 document.querySelectorAll('.layer').forEach(btn=>{
  btn.addEventListener('click',()=>{
@@ -1426,7 +1445,7 @@ async function aiAskPuter(onText){
  return text;
 }
 
-(function animate(){requestAnimationFrame(animate);if(mode3d&&t3){if(!t3.drag)t3.earth.rotation.y+=.0016;if(t3.hubGlow)t3.hubGlow.material.opacity=.55+.35*Math.sin(performance.now()*.004);updateLabels3d();t3.rd.render(t3.s,t3.cam)}})();
+(function animate(){requestAnimationFrame(animate);if(mode3d&&t3){if(!t3.drag)t3.earth.rotation.y+=.0016;t3.atmo.forEach(m=>m.material.color.lerp(t3.tint,.07));if(t3.hubGlow)t3.hubGlow.material.opacity=.55+.35*Math.sin(performance.now()*.004);updateLabels3d();t3.rd.render(t3.s,t3.cam)}})();
 </script>
 </body>
 </html>
