@@ -872,14 +872,18 @@ function buildLive3(key){ if(!t3)return;
   t3.overlay.material.map=tex;t3.overlay.material.needsUpdate=true;t3.overlay.visible=true;
  };
  if(liveTexCache[id]){apply(liveTexCache[id]);return;}
- if(t3.loading===id)return;
- t3.loading=id;
+ // Not downloaded yet: hide the previous tab's image at once (it would be the wrong data) and say it's loading.
+ if(t3.overlay)t3.overlay.visible=false;
+ toast('Loading NASA layer: '+s.label+'…');
+ t3.loadingIds=t3.loadingIds||new Set();
+ if(t3.loadingIds.has(id))return; // already downloading; apply() runs when it arrives if this tab is still selected
+ t3.loadingIds.add(id);
  loadWorldTiles(id,ext,3,lvl).then(mercatorToEquirect).then(ec=>{
-  t3.loading=null;
   const tex=new THREE.CanvasTexture(ec);
   liveTexCache[id]=tex;
-  apply(tex);
- }).catch(()=>{t3.loading=null});
+  const cur=t3.liveKey&&sources[t3.liveKey]; // the tab selected now (may be another tab that shares this layer)
+  if(mode3d&&cur&&cur.gibs&&cur.gibs[0]===id)buildLive3(t3.liveKey);
+ }).catch(()=>{toast('NASA layer unavailable right now - try again shortly');}).finally(()=>t3.loadingIds.delete(id));
 }
 function init3D(){
  const host=document.getElementById('globe3d');
