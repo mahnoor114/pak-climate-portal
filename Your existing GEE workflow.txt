@@ -1,0 +1,13 @@
+Your existing GEE workflow
+        ↓
+Sentinel-2 images
+        +
+Landslide masks / coordinates
+        ↓
+Create image + label dataset
+        ↓
+Liquid LFM2.5-VL-450M
+        ↓
+LoRA fine-tuning
+        ↓
+Your Landslide Satellite VLM

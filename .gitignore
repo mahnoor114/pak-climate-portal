@@ -1,0 +1,12 @@
+# Secrets - never save API keys in version history
+groc api.txt
+*.key
+.env
+
+# Generated / temporary
+logs/
+backups/
+__pycache__/
+*.pyc
+lib/wind_cache.json
+lib/*.tmp
