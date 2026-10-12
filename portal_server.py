@@ -12,6 +12,7 @@ The chat panel can use two assistants with the same portal data:
 Keys stay on this machine; the browser never sees them.
 """
 import datetime as dt
+import io
 import json
 import math
 import os
@@ -246,9 +247,64 @@ def get_wind():
     return None, _wind_status
 
 
+# The portal folder is on a network drive that can stall for seconds at a time. Static files are kept in
+# memory after the first read; each file's timestamp is re-checked at most every STATIC_RECHECK seconds,
+# so edits still show up quickly without a disk round trip on every request.
+STATIC_RECHECK = 10
+_static = {}  # path -> {'mtime', 'data', 'checked'}
+_static_lock = threading.Lock()
+
+
+def static_file(path):
+    """Return (bytes, mtime) for a file under ROOT, or None if it doesn't exist."""
+    now = time.time()
+    with _static_lock:
+        hit = _static.get(path)
+        if hit and now - hit['checked'] < STATIC_RECHECK:
+            return hit['data'], hit['mtime']
+    try:
+        mtime = os.path.getmtime(path)
+    except OSError:
+        return None
+    with _static_lock:
+        hit = _static.get(path)
+        if hit and hit['mtime'] == mtime:
+            hit['checked'] = now
+            return hit['data'], mtime
+    with open(path, 'rb') as f:
+        data = f.read()
+    with _static_lock:
+        _static[path] = {'mtime': mtime, 'data': data, 'checked': now}
+    return data, mtime
+
+
 class Handler(SimpleHTTPRequestHandler):
     def __init__(self, *a, **kw):
         super().__init__(*a, directory=ROOT, **kw)
+
+    def send_head(self):
+        """Serve regular files from the in-memory cache (with ETag revalidation); defer everything else."""
+        path = self.translate_path(self.path)
+        if not os.path.basename(path) or os.path.isdir(path):
+            return super().send_head()
+        got = static_file(path)
+        if got is None:
+            self.send_error(404, 'File not found')
+            return None
+        data, mtime = got
+        etag = f'"{int(mtime * 1000):x}-{len(data):x}"'
+        if self.headers.get('If-None-Match') == etag:
+            self.send_response(304)
+            self.send_header('ETag', etag)
+            self.end_headers()
+            return None
+        self.send_response(200)
+        self.send_header('Content-Type', self.guess_type(path))
+        self.send_header('Content-Length', str(len(data)))
+        self.send_header('ETag', etag)
+        self.send_header('Cache-Control', 'no-cache')  # browser revalidates (cheap 304) so edits appear on reload
+        self.end_headers()
+        return io.BytesIO(data)
 
     def do_GET(self):
         route = self.path.split('?')[0]
