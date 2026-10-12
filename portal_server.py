@@ -20,6 +20,7 @@ import re
 import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
@@ -71,12 +72,13 @@ PORTAL LAYOUT
 - "⛰ Terrain" button: a 3D view of Pakistan's real terrain (Mapbox satellite imagery and elevation,
   heights exaggerated 1.7x) that slowly rotates. Its "Fly to" bar visits K2 & Karakoram, Nanga Parbat,
   Hunza, Hindu Kush, Tarbela Dam, Islamabad, Quetta, the Indus Delta and all of Pakistan. City labels
-  (Islamabad, Lahore, Karachi, Peshawar, Quetta, Gilgit) open that city's forecast. Purely visual.
-- "🌦 Forecast" button: free meteoblue widgets - an animated live weather map (wind, gusts, rain and
-  clouds, temperature, satellite, sunshine, extreme-forecast index) and a "City forecast" tab for the
-  six cities above: current weather + 3-hourly forecast, a 7-day forecast, and links that open
-  meteoblue's full forecast page, meteogram, 10-day, multi-model and seasonal outlook in a new tab. You cannot see the numbers inside these widgets; for a specific city forecast, tell
-  the user to open it there.
+  open that city's forecast. Purely visual.
+- "🌦 Forecast" button: weather forecasts for 14 Pakistani cities from Open-Meteo (free; global weather
+  models such as ECMWF, GFS and DWD ICON, best model chosen per location), refreshed at most every 30 min:
+  current conditions, a 7-day outlook (high/low, rain amount and chance, wind, gusts, UV, sunrise/sunset)
+  and a 48-hour chart of temperature, rain and wind. When the forecast window is open, the page snapshot
+  includes the shown city's forecast as "forecast_shown" - quote it when asked about upcoming weather.
+  These are model forecasts, not official warnings.
 
 DRIVERS (key: name - what the data series is)
 - enso: ENSO - Niño 3.4 sea-surface temperature anomaly (°C). >=+0.5 El Niño, <=-0.5 La Niña, else neutral.
@@ -216,6 +218,41 @@ def _refresh_wind_forever():
         time.sleep(300)
 
 
+# ---- City forecasts (Open-Meteo, free; credit "Weather data: Open-Meteo") ----
+# Fetched when a city is opened and cached for FORECAST_MAX_AGE, so repeat views cost no API calls.
+FORECAST_MAX_AGE = 30 * 60
+FORECAST_URL = ('https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&timezone=Asia%2FKarachi'
+                '&forecast_days=7&wind_speed_unit=kmh'
+                '&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m,'
+                'wind_direction_10m,wind_gusts_10m,precipitation,cloud_cover,is_day'
+                '&hourly=temperature_2m,precipitation_probability,precipitation,weather_code,wind_speed_10m,wind_gusts_10m'
+                '&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,'
+                'wind_speed_10m_max,wind_gusts_10m_max,uv_index_max,sunrise,sunset')
+_forecasts = {}  # (lat, lon) -> (fetched_at, payload)
+_forecast_lock = threading.Lock()
+
+
+def get_forecast(lat, lon):
+    """Return (payload, error) for a point, from cache when fresh. Falls back to a stale copy if Open-Meteo fails."""
+    key = (round(lat, 2), round(lon, 2))
+    with _forecast_lock:
+        hit = _forecasts.get(key)
+    if hit and time.time() - hit[0] < FORECAST_MAX_AGE:
+        return hit[1], None
+    try:
+        req = urllib.request.Request(FORECAST_URL.format(lat=key[0], lon=key[1]), headers={'User-Agent': 'PakClimateDashboard/1.0'})
+        with urllib.request.urlopen(req, timeout=30) as r:
+            payload = json.loads(r.read())
+        payload['fetched'] = dt.datetime.now(dt.timezone.utc).strftime('%Y-%m-%d %H:%M UTC')
+        with _forecast_lock:
+            _forecasts[key] = (time.time(), payload)
+        return payload, None
+    except (urllib.error.URLError, OSError, ValueError) as e:
+        if hit:
+            return dict(hit[1], stale=True), None
+        return None, f'Forecast service unavailable ({e})'
+
+
 DATA_MAX_AGE = 24 * 3600  # refresh lib/indices.js once a day
 
 
@@ -308,6 +345,24 @@ class Handler(SimpleHTTPRequestHandler):
 
     def do_GET(self):
         route = self.path.split('?')[0]
+        if route == '/api/forecast':
+            q = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
+            try:
+                lat, lon = float(q['lat'][0]), float(q['lon'][0])
+                if not (-90 <= lat <= 90 and -180 <= lon <= 180):
+                    raise ValueError
+            except (KeyError, ValueError, IndexError):
+                self.send_error(400, 'Expected ?lat=..&lon=..')
+                return
+            payload, error = get_forecast(lat, lon)
+            body = json.dumps(payload if payload else {'error': error}).encode('utf-8')
+            self.send_response(200 if payload else 503)
+            self.send_header('Content-Type', 'application/json')
+            self.send_header('Content-Length', str(len(body)))
+            self.send_header('Cache-Control', 'no-cache')
+            self.end_headers()
+            self.wfile.write(body)
+            return
         if route == '/api/ai-status':
             # Which assistants can answer through this server. Only yes/no - the keys never leave the machine.
             # Without a key the page uses that AI free through Puter instead.
