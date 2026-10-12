@@ -48,7 +48,7 @@ function Sync-App {
     $rc = Start-Process -FilePath robocopy.exe -WindowStyle Hidden -PassThru -ArgumentList @(
         "`"$Source`"", "`"$App`"", '/E', '/XO', '/R:1', '/W:2', '/NFL', '/NDL', '/NJH', '/NJS', '/NP',
         '/XD', 'logs', 'backups', '.git', '__pycache__',
-        '/XF', '"groc api.txt"', '*.tmp', '*.zip')
+        '/XF', '"groc api.txt"', '*.tmp', '*.zip', 'Pakistan_Districts.geojson')
     if (-not $rc.WaitForExit(180000)) {
         Stop-Process -Id $rc.Id -Force -ErrorAction SilentlyContinue
         Write-Log 'Copy from the network drive timed out; running the last local copy.'

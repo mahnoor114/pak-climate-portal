@@ -12,3 +12,6 @@ lib/wind_cache.json
 lib/*.tmp
 lib/pak_forecast_cache.json
 lib/aq_cache.json
+
+# Large source data (the portal uses the simplified lib/districts.js)
+Pakistan_Districts.geojson

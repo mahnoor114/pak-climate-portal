@@ -14,6 +14,7 @@
 <script src="lib/indices.js"></script>
 <script src="lib/countries.js"></script>
 <script src="lib/pak_boundary.js"></script>
+<script src="lib/districts.js"></script>
 <style>
 :root{
  --bg:#06101a; --panel:rgba(7,20,31,.86); --panel2:rgba(12,31,45,.88);
@@ -268,6 +269,12 @@ body.modeTerrain #tFlash{display:block}
 .pkLegend{position:absolute;z-index:500;right:10px;bottom:10px;padding:8px 10px;border-radius:8px;font-size:10px;color:var(--ink-dim);background:rgba(8,16,26,.88);border:1px solid var(--border);pointer-events:none;min-width:230px}
 .pkLegend .bar{height:9px;border-radius:5px;margin:5px 0 3px}
 .pkLegend .ticks{display:flex;justify-content:space-between}
+.pkRank{position:absolute;z-index:500;right:10px;top:10px;padding:8px 10px;border-radius:8px;font-size:10.5px;color:var(--ink-dim);background:rgba(8,16,26,.88);border:1px solid var(--border);min-width:200px;max-width:260px}
+.pkRank:empty{display:none}
+.pkRank b{color:var(--ink)}
+.pkRank ol{margin:4px 0 0;padding-left:18px}.pkRank li{margin:2px 0}.pkRank li span{color:#fff;font-weight:700}
+.fcSearch input{width:100%;font:inherit;font-size:12px;color:var(--ink);background:rgba(0,0,0,.25);border:1px solid var(--border-strong);border-radius:10px;padding:8px 12px;outline:none}
+.fcSearch input:focus{border-color:var(--accent)}
 .pkCity{white-space:nowrap;font:700 10.5px Inter,Segoe UI,Arial,sans-serif;color:#fff;text-shadow:0 1px 3px #000,0 0 6px #000;transform:translate(-50%,-50%)}
 .pkCity small{font-weight:500;color:#cbd5e1}
 @media(max-width:1000px){.fcDays{grid-template-columns:repeat(4,1fr)}.fcNow{grid-template-columns:1fr}.fcStats{grid-template-columns:repeat(3,1fr)}}
@@ -410,10 +417,11 @@ body.aiOpen #aiFab{display:none}
    <div class="fcBar"><span class="lbl">Day</span><div class="fcSeg" id="pkDays"></div></div>
    <div class="fcBar"><span class="lbl">Weather</span><div class="fcSeg" id="pkVars"></div></div>
    <div class="fcBar"><span class="lbl">Air</span><div class="fcSeg" id="pkAqVars"></div></div>
-   <div class="pkMapWrap"><div id="pkMap"></div><div class="pkInfo" id="pkInfo">Hover for values · click anywhere for that spot's full forecast</div><div class="pkLegend" id="pkLegend"></div></div>
+   <div class="pkMapWrap"><div id="pkMap"></div><div class="pkRank" id="pkRank"></div><div class="pkInfo" id="pkInfo">Hover for values · click anywhere for that spot's full forecast</div><div class="pkLegend" id="pkLegend"></div></div>
    <div class="fcMsg" id="pkMsg"></div>
   </div>
   <div class="fcView" data-view="city">
+  <div class="fcSearch"><input id="fcDistrict" list="fcDistrictList" placeholder="🔎 Search any of Pakistan's 167 districts…" autocomplete="off"><datalist id="fcDistrictList"></datalist></div>
   <div class="mbCities" id="mbCities"></div>
   <div class="fcMsg" id="fcMsg"></div>
   <div id="fcBody">
@@ -531,6 +539,24 @@ if(HAS_PAK_BOUNDARY){
    :{color:ACCENT,weight:2,opacity:1,fillColor:ACCENT,fillOpacity:.1,className:'cty-pk'},
   onEachFeature:(f,l)=>l.bindTooltip(f.properties.name,{sticky:true,className:'pkTip'})
  }).addTo(map);
+}
+// ---- Districts (Pakistan_Districts.geojson -> lib/districts.js): outlines, lookup, district averages ----
+const HAS_DISTRICTS=typeof DISTRICTS!=='undefined';
+function inRing(x,y,r){let c=false;for(let i=0,j=r.length-1;i<r.length;j=i++){const [xi,yi]=r[i],[xj,yj]=r[j];if((yi>y)!==(yj>y)&&x<(xj-xi)*(y-yi)/(yj-yi)+xi)c=!c;}return c;}
+function inDistrict(x,y,f){const b=f.bb;if(x<b[0]||x>b[2]||y<b[1]||y>b[3])return false;return f.geometry.coordinates.some(poly=>inRing(x,y,poly[0])&&!poly.slice(1).some(h=>inRing(x,y,h)));}
+function districtAt(lat,lon){return HAS_DISTRICTS?DISTRICTS.features.find(f=>inDistrict(lon,lat,f)):null;}
+if(HAS_DISTRICTS)DISTRICTS.features.forEach(f=>{ // bounding box + sample points used for district averages
+ const xs=[],ys=[];f.geometry.coordinates.forEach(p=>p[0].forEach(([x,y])=>{xs.push(x);ys.push(y);}));
+ f.bb=[Math.min(...xs),Math.min(...ys),Math.max(...xs),Math.max(...ys)];
+ const step=Math.min(.2,Math.max(.04,Math.min(f.bb[2]-f.bb[0],f.bb[3]-f.bb[1])/6));f.samples=[];
+ for(let y=f.bb[1]+step/2;y<f.bb[3];y+=step)for(let x=f.bb[0]+step/2;x<f.bb[2];x+=step)if(inDistrict(x,y,f))f.samples.push([y,x]);
+ if(!f.samples.length)f.samples.push([f.properties.c[1],f.properties.c[0]]);
+});
+if(HAS_DISTRICTS){ // main map: district outlines once zoomed in
+ const dl=L.geoJSON(DISTRICTS,{pane:'pakBoundary',interactive:false,style:f=>({color:'#cbd5e1',weight:.7,opacity:.5,fill:false,dashArray:f.properties.disputed?'4 4':null})});
+ const sync=()=>{if(map.getZoom()>=6)dl.addTo(map);else dl.remove();};
+ map.on('zoomend',sync);sync();
+ map.on('mousemove',e=>{const d=map.getZoom()>=6&&districtAt(e.latlng.lat,e.latlng.lng);map.getContainer().title=d?d.properties.n+' district · '+d.properties.p:'';});
 }
 
 const layers={};
@@ -1190,6 +1216,12 @@ const compass=deg=>['N','NE','E','SE','S','SW','W','NW'][Math.round(((deg%360)+3
 const r0=v=>v==null?'–':Math.round(v);
 const mbCityBox=document.getElementById('mbCities');
 FC_CITIES.forEach(c=>{const b=document.createElement('button');b.type='button';b.textContent=c.n;b.dataset.city=c.n;b.onclick=()=>fcShow(c.n);mbCityBox.appendChild(b);});
+if(HAS_DISTRICTS){ // any of the 167 districts: forecast at a point inside it
+ const dlist=document.getElementById('fcDistrictList'),dinp=document.getElementById('fcDistrict');
+ dlist.innerHTML=DISTRICTS.features.map(f=>'<option value="'+f.properties.n+' - '+f.properties.p+'">').join('');
+ dinp.addEventListener('change',()=>{const f=DISTRICTS.features.find(x=>x.properties.n+' - '+x.properties.p===dinp.value);
+  if(f){fcShow({n:f.properties.n+' district ('+f.properties.p+')',ll:f.properties.c});dinp.value='';}});
+}else document.querySelector('.fcSearch').style.display='none';
 function fcMsg(text){const m=document.getElementById('fcMsg');m.textContent=text||'';m.classList.toggle('on',!!text);document.getElementById('fcBody').style.display=text?'none':'';}
 async function fcShow(place){ // a city name, or {n:'label', ll:[lon,lat]} for any clicked point
  const c=(place&&typeof place==='object')?place:(FC_CITIES.find(x=>x.n===place)||FC_CITIES[0]);
@@ -1323,20 +1355,40 @@ function pkValue(lat,lon){ // bilinear value of the selected variable/day at a p
 }
 // City labels use the city's own point forecast (the grid averages towns with surrounding mountains).
 function pkCityValue(c){const D=pkSet(),v=D&&D.cities&&D.cities[c.n]&&D.cities[c.n][pk.v];return v&&v[pk.day]!=null?v[pk.day]:pkValue(c.ll[1],c.ll[0]);}
-function pkInit(){
+// District average of the selected variable/day (mean over sample points inside the district), cached per view.
+function pkDistrictValue(d){
+ const key=pk.v+'|'+pk.day+'|'+(pkSet()||{}).fetched;
+ if(d.avgKey!==key){const vals=d.samples.map(([la,lo])=>pkValue(la,lo)).filter(v=>v!=null);d.avg=vals.length?vals.reduce((a,b)=>a+b,0)/vals.length:null;d.avgKey=key;}
+ return d.avg;
+}
+function pkDistrictTable(){ // [{name, province, value}] for every district with data, highest first
+ if(!HAS_DISTRICTS)return [];
+ return DISTRICTS.features.filter(d=>!d.properties.disputed).map(d=>({name:d.properties.n,province:d.properties.p,value:pkDistrictValue(d)}))
+  .filter(x=>x.value!=null).sort((a,b)=>b.value-a.value);
+}
+function pkRankDistricts(){
+ const box=document.getElementById('pkRank'),V=PK_VARS[pk.v],rows=pkDistrictTable();
+ if(!rows.length){box.innerHTML='';return;}
+ const top=rows.slice(0,5),cold=pk.v.startsWith('temperature')?rows.slice(-3).reverse():null;
+ box.innerHTML='<b>Highest districts</b> · '+V.label+'<ol>'+top.map(x=>'<li>'+x.name+' <small>('+x.province.replace(' Capital Territory','')+')</small> <span>'+V.fmt(x.value)+'</span></li>').join('')+'</ol>'+
+  (cold?'<b>Coldest</b><ol>'+cold.map(x=>'<li>'+x.name+' <span>'+V.fmt(x.value)+'</span></li>').join('')+'</ol>':'');
+}function pkInit(){
  pk.map=L.map('pkMap',{zoomControl:true,attributionControl:true,minZoom:4,maxZoom:9}).fitBounds([[23.6,60.8],[37.1,77.9]]);
  L.tileLayer('https://api.mapbox.com/styles/v1/mapbox/dark-v11/tiles/512/{z}/{x}/{y}@2x?access_token='+MAPBOX_TOKEN,
   {tileSize:512,zoomOffset:-1,attribution:'&copy; Mapbox &copy; OpenStreetMap · Weather data: Open-Meteo'}).addTo(pk.map);
  pk.map.createPane('pkTop').style.zIndex=450;
  if(HAS_PAK_BOUNDARY)L.geoJSON(PAK_BOUNDARY,{pane:'pkTop',interactive:false,style:f=>({color:'#ffffff',weight:f.properties.disputed?1.2:1.6,opacity:.9,dashArray:f.properties.disputed?'6 5':null,fill:false})}).addTo(pk.map);
+ if(HAS_DISTRICTS)L.geoJSON(DISTRICTS,{pane:'pkTop',interactive:false,style:f=>({color:'#e2e8f0',weight:.6,opacity:.45,fill:false,dashArray:f.properties.disputed?'4 4':null})}).addTo(pk.map);
  pk.labels=L.layerGroup().addTo(pk.map);
- pk.map.on('mousemove',e=>{const v=pkValue(e.latlng.lat,e.latlng.lng);
-  document.getElementById('pkInfo').textContent=v==null?'Hover for values · click anywhere for that spot\'s full forecast':
-   e.latlng.lat.toFixed(2)+'°N '+e.latlng.lng.toFixed(2)+'°E · '+PK_VARS[pk.v].label+': '+PK_VARS[pk.v].fmt(v)+(pk.v==='us_aqi'?' - '+aqiInfo(v).cat:'')+' (area average) · click for this spot\'s exact forecast';});
+ pk.map.on('mousemove',e=>{const v=pkValue(e.latlng.lat,e.latlng.lng),V=PK_VARS[pk.v],d=districtAt(e.latlng.lat,e.latlng.lng),dv=d&&pkDistrictValue(d);
+  document.getElementById('pkInfo').innerHTML=v==null?'Hover for values · click anywhere for that spot\'s full forecast':
+   (d?'<b>'+d.properties.n+'</b> district · '+d.properties.p+' · pop. '+(d.properties.pop/1e6).toFixed(1)+' M<br>District average: '+(dv==null?'–':V.fmt(dv)+(pk.v==='us_aqi'?' - '+aqiInfo(dv).cat:''))+' · this spot: ':e.latlng.lat.toFixed(2)+'°N '+e.latlng.lng.toFixed(2)+'°E · ')+
+   V.fmt(v)+' · click for this spot\'s full forecast';});
  pk.map.on('click',e=>{if(pkValue(e.latlng.lat,e.latlng.lng)==null)return;
   const lat=+e.latlng.lat.toFixed(2),lon=+e.latlng.lng.toFixed(2);
   const near=FC_CITIES.map(c=>({c,d:Math.hypot(c.ll[0]-lon,c.ll[1]-lat)})).sort((a,b)=>a.d-b.d)[0];
-  openForecast({n:lat+'°N '+lon+'°E'+(near.d<1?' (near '+near.c.n+')':''),ll:[lon,lat]});});
+  const d=districtAt(lat,lon);
+  openForecast({n:d?d.properties.n+' district ('+lat+'°N '+lon+'°E)':lat+'°N '+lon+'°E'+(near.d<1?' (near '+near.c.n+')':''),ll:[lon,lat]});});
  // day / variable buttons
  const vb=document.getElementById('pkVars');
  const ab=document.getElementById('pkAqVars');
@@ -1389,6 +1441,8 @@ function pkDraw(){
  pk.labels.clearLayers();
  FC_CITIES.forEach(c=>{const v=pkCityValue(c);if(v==null)return;
   L.marker([c.ll[1],c.ll[0]],{interactive:false,pane:'pkTop',icon:L.divIcon({className:'',html:'<div class="pkCity">'+V.fmt(v)+'<br><small>'+c.n+'</small></div>',iconSize:[0,0]})}).addTo(pk.labels);});
+ // district ranking: highest district averages for this variable and day
+ pkRankDistricts();
  // legend
  const st=V.ramp;document.getElementById('pkLegend').innerHTML='<b style="color:var(--ink)">'+V.label+(V.note?' ('+V.note+')':'')+' · '+document.querySelector('#pkDays .on').textContent+'</b>'+
   '<div class="bar" style="background:linear-gradient(90deg,'+st.map(([v,c],i)=>c+' '+(i/(st.length-1)*100)+'%').join(',')+')"></div>'+
@@ -1755,7 +1809,7 @@ function aiSnapshot(){
  const scores={};for(const id in SCORE_NAME)scores[SCORE_NAME[id]]={score:txt('sc_'+id),status:txt('sub_'+id)};
  const js=jetSeries();
  return {
-  date:new Date().toISOString().slice(0,10),time_pkt:txt('clock'),view:mode3d?'3D globe':terrainOn?'3D terrain':'2D map',forecast_window_open:mb.modal.classList.contains('on'),forecast_map:mb.modal.classList.contains('on')&&document.querySelector('.fcView[data-view="map"]').classList.contains('on')&&pk.data?{day:pk.data.days[pk.day],showing:PK_VARS[pk.v].label,city_values:Object.fromEntries(FC_CITIES.map(c=>[c.n,pkCityValue(c)]).filter(([,v])=>v!=null).map(([n,v])=>[n,Math.round(v*10)/10]))}:null,forecast_shown:mb.modal.classList.contains('on')&&mb.data?{city:mb.data.city,now:{temp_c:mb.data.current.temperature_2m,feels_c:mb.data.current.apparent_temperature,sky:wmo(mb.data.current.weather_code,mb.data.current.is_day)[1],wind_kmh:mb.data.current.wind_speed_10m,gust_kmh:mb.data.current.wind_gusts_10m,humidity_pct:mb.data.current.relative_humidity_2m},days:mb.data.daily.time.map((t,i)=>({date:t,sky:wmo(mb.data.daily.weather_code[i])[1],max_c:mb.data.daily.temperature_2m_max[i],min_c:mb.data.daily.temperature_2m_min[i],rain_mm:mb.data.daily.precipitation_sum[i],rain_chance_pct:mb.data.daily.precipitation_probability_max[i],wind_max_kmh:mb.data.daily.wind_speed_10m_max[i],uv:mb.data.daily.uv_index_max[i]})),air_quality_now:mb.air||null,source:'Open-Meteo (weather), CAMS (air)'}:null,
+  date:new Date().toISOString().slice(0,10),time_pkt:txt('clock'),view:mode3d?'3D globe':terrainOn?'3D terrain':'2D map',forecast_window_open:mb.modal.classList.contains('on'),forecast_map:mb.modal.classList.contains('on')&&document.querySelector('.fcView[data-view="map"]').classList.contains('on')&&pk.data?{day:pk.data.days[pk.day],showing:PK_VARS[pk.v].label,top_districts:pkDistrictTable().slice(0,8).map(x=>({district:x.name,province:x.province,value:Math.round(x.value*10)/10})),city_values:Object.fromEntries(FC_CITIES.map(c=>[c.n,pkCityValue(c)]).filter(([,v])=>v!=null).map(([n,v])=>[n,Math.round(v*10)/10]))}:null,forecast_shown:mb.modal.classList.contains('on')&&mb.data?{city:mb.data.city,now:{temp_c:mb.data.current.temperature_2m,feels_c:mb.data.current.apparent_temperature,sky:wmo(mb.data.current.weather_code,mb.data.current.is_day)[1],wind_kmh:mb.data.current.wind_speed_10m,gust_kmh:mb.data.current.wind_gusts_10m,humidity_pct:mb.data.current.relative_humidity_2m},days:mb.data.daily.time.map((t,i)=>({date:t,sky:wmo(mb.data.daily.weather_code[i])[1],max_c:mb.data.daily.temperature_2m_max[i],min_c:mb.data.daily.temperature_2m_min[i],rain_mm:mb.data.daily.precipitation_sum[i],rain_chance_pct:mb.data.daily.precipitation_probability_max[i],wind_max_kmh:mb.data.daily.wind_speed_10m_max[i],uv:mb.data.daily.uv_index_max[i]})),air_quality_now:mb.air||null,source:'Open-Meteo (weather), CAMS (air)'}:null,
   active_layer:txt('activeTitle').replace('Active layer: ',''),map_layer_source:txt('liveSrc'),
   driver_card_open:dvm.classList.contains('on')?txt('dvmTitle'):null,
   influence_scores:scores,

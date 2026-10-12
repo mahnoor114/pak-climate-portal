@@ -76,8 +76,10 @@ PORTAL LAYOUT
   open that city's forecast. Purely visual.
 - "🌦 Forecast" button opens on a whole-Pakistan forecast map (Open-Meteo 0.75° grid covering the official
   boundary, 7 days): pick a day and Rain / Chance of rain / Max temp / Min temp / Max wind; hover for values,
-  click anywhere for that spot's full forecast. When this map is open the snapshot has "forecast_map" with the
-  day, variable and each city's value. Its second tab has forecasts for 14 Pakistani cities from Open-Meteo (free; global weather
+  click anywhere for that spot's full forecast. Pakistan's 167 districts are outlined (from the user's
+  Pakistan_Districts.geojson); hovering shows the district average. When this map is open the snapshot has
+  "forecast_map" with the day, variable, "top_districts" (highest district averages) and each city's value;
+  the city/point tab also has a search box for any district. Its second tab has forecasts for 14 Pakistani cities from Open-Meteo (free; global weather
   models such as ECMWF, GFS and DWD ICON, best model chosen per location), refreshed at most every 30 min:
   current conditions, a 7-day outlook (high/low, rain amount and chance, wind, gusts, UV, sunrise/sunset)
   and a 48-hour chart of temperature, rain and wind. When the forecast window is open, the page snapshot
