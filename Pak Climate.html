@@ -227,6 +227,13 @@ body.modeTerrain #tFlash{display:block}
 .fcStats{display:grid;grid-template-columns:repeat(3,auto);gap:6px 18px;font-size:11px;color:var(--ink-dim)}
 .fcStats b{display:block;font-size:14px;color:var(--ink)}
 .fcDays{display:grid;grid-template-columns:repeat(7,1fr);gap:8px}
+.fcAir{display:grid;grid-template-columns:auto 1fr repeat(6,auto);gap:6px 18px;align-items:center;padding:10px 16px;border-radius:14px;background:var(--surface-2);border:1px solid var(--border);font-size:11px;color:var(--ink-dim)}
+.fcAir:empty{display:none}
+.fcAir .aqi{min-width:62px;text-align:center;padding:6px 10px;border-radius:12px;color:#04121c;font-weight:800;font-size:22px;line-height:1}
+.fcAir .aqi small{display:block;font-size:9px;font-weight:700;letter-spacing:.5px;margin-top:3px}
+.fcAir .cat b{display:block;color:#fff;font-size:13px}
+.fcAir .st b{display:block;color:var(--ink);font-size:13px}
+@media(max-width:1000px){.fcAir{grid-template-columns:auto 1fr;}}
 .fcDay{padding:10px 8px;border-radius:12px;background:var(--surface-2);border:1px solid var(--border);text-align:center;font-size:10.5px;color:var(--ink-dim)}
 .fcDay.today{border-color:var(--accent-line);background:var(--accent-soft)}
 .fcDay .d{font-size:12px;font-weight:700;color:var(--ink)}
@@ -252,7 +259,8 @@ body.modeTerrain #tFlash{display:block}
 .fcView{display:none;flex-direction:column;gap:10px}
 .fcView.on{display:flex}
 .fcBar{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-.fcBar .lbl{font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--ink-dim);width:38px}
+.fcBar .lbl{font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--ink-dim);width:58px}
+.fcSeg button.na{opacity:.35;cursor:not-allowed}
 .fcSeg{display:flex;gap:6px;flex-wrap:wrap}
 .pkMapWrap{position:relative;height:min(560px,58vh);border-radius:12px;overflow:hidden;border:1px solid var(--border)}
 #pkMap{position:absolute;inset:0;background:#05080f}
@@ -400,7 +408,8 @@ body.aiOpen #aiFab{display:none}
   </div>
   <div class="fcView on" data-view="map">
    <div class="fcBar"><span class="lbl">Day</span><div class="fcSeg" id="pkDays"></div></div>
-   <div class="fcBar"><span class="lbl">Show</span><div class="fcSeg" id="pkVars"></div></div>
+   <div class="fcBar"><span class="lbl">Weather</span><div class="fcSeg" id="pkVars"></div></div>
+   <div class="fcBar"><span class="lbl">Air</span><div class="fcSeg" id="pkAqVars"></div></div>
    <div class="pkMapWrap"><div id="pkMap"></div><div class="pkInfo" id="pkInfo">Hover for values · click anywhere for that spot's full forecast</div><div class="pkLegend" id="pkLegend"></div></div>
    <div class="fcMsg" id="pkMsg"></div>
   </div>
@@ -409,6 +418,7 @@ body.aiOpen #aiFab{display:none}
   <div class="fcMsg" id="fcMsg"></div>
   <div id="fcBody">
    <div class="fcNow" id="fcNow"></div>
+   <div class="fcAir" id="fcAir"></div>
    <div class="fcDays" id="fcDays"></div>
    <div class="fcChartWrap">
     <div class="fcChartHead"><b>Next 48 hours</b><span class="muted">temperature · chance of rain · wind</span></div>
@@ -416,7 +426,7 @@ body.aiOpen #aiFab{display:none}
    </div>
   </div>
   </div>
-  <div class="mbCredit">Weather data: <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a> · model forecasts, not official warnings (see PMD for alerts) · <span id="fcUpdated"></span></div>
+  <div class="mbCredit">Weather data: <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a> · air quality: Copernicus CAMS · model forecasts, not official warnings (see PMD for alerts) · <span id="fcUpdated"></span></div>
  </div>
 </div>
 
@@ -1193,11 +1203,27 @@ async function fcShow(place){ // a city name, or {n:'label', ll:[lon,lat]} for a
   if(!r.ok)throw new Error(js.error||('error '+r.status));
   if(mb.city!==c.n)return; // another city was picked meanwhile
   mb.data={city:c.n,...js};
-  fcRender();fcMsg('');
+  fcRender();fcMsg('');fcAir(c);
  }catch(e){if(mb.city===c.n)fcMsg('Forecast unavailable right now ('+(e.message||'network error')+'). Try again in a minute.');}
 }
-function fcRender(){
- const d=mb.data,cur=d.current,day=d.daily,[ico,desc]=wmo(cur.weather_code,cur.is_day);
+// Air-quality card for the shown city/point (/api/airquality, cached 60 min on the server, 5 min in the browser)
+async function fcAir(c){
+ const box=document.getElementById('fcAir');
+ try{
+  const r=await fetch('/api/airquality?lat='+c.ll[1]+'&lon='+c.ll[0]);if(!r.ok)throw 0;
+  const js=await r.json();if(mb.city!==c.n)return;
+  const a=js.current,info=aqiInfo(a.us_aqi||0),h=js.hourly||{},now=a.time.slice(0,13);
+  const next=(h.time||[]).map((t,i)=>({t,v:h.us_aqi[i]})).filter(x=>x.t.slice(0,13)>=now&&x.v!=null).slice(0,24);
+  const worst=next.reduce((m,x)=>!m||x.v>m.v?x:m,null);
+  mb.air={aqi:a.us_aqi,category:info.cat,pm2_5:a.pm2_5,pm10:a.pm10,aod:a.aerosol_optical_depth,dust:a.dust,ozone:a.ozone,no2:a.nitrogen_dioxide,worst_next_24h:worst&&{aqi:worst.v,time:worst.t}};
+  box.innerHTML='<div class="aqi" style="background:'+info.color+'">'+r0(a.us_aqi)+'<small>US AQI</small></div>'+
+   '<div class="cat"><b>Air: '+info.cat+'</b>'+info.advice+(worst?' · worst next 24 h: AQI '+r0(worst.v)+' at '+worst.t.slice(11,16):'')+'</div>'+
+   '<div class="st">PM2.5<b>'+r0(a.pm2_5)+'</b></div><div class="st">PM10<b>'+r0(a.pm10)+'</b></div><div class="st">AOD<b>'+(a.aerosol_optical_depth!=null?a.aerosol_optical_depth.toFixed(2):'–')+'</b></div>'+
+   '<div class="st">Dust<b>'+r0(a.dust)+'</b></div><div class="st">Ozone<b>'+r0(a.ozone)+'</b></div><div class="st">NO₂<b>'+r0(a.nitrogen_dioxide)+'</b></div>';
+  box.title='Particles in µg/m³ · AOD = how hazy the air column is (0 clear, >1 very hazy) · source: Open-Meteo / CAMS'+(js.stale?' (saved copy)':'');
+ }catch(e){if(mb.city===c.n){box.innerHTML='';mb.air=null;}}
+}
+function fcRender(){ const d=mb.data,cur=d.current,day=d.daily,[ico,desc]=wmo(cur.weather_code,cur.is_day);
  document.getElementById('fcNow').innerHTML=
   '<div class="fcBig"><span class="ico">'+ico+'</span><span class="t">'+r0(cur.temperature_2m)+'<small>°C</small></span></div>'+
   '<div class="fcDesc"><b>'+desc+'</b><span>Feels like '+r0(cur.apparent_temperature)+'°C · today '+r0(day.temperature_2m_min[0])+'° to '+r0(day.temperature_2m_max[0])+'° · sunrise '+day.sunrise[0].slice(11)+', sunset '+day.sunset[0].slice(11)+'</span></div>'+
@@ -1255,9 +1281,29 @@ const PK_VARS={
  temperature_2m_min:{label:'Min temperature',unit:'°C',fmt:v=>Math.round(v)+'°C',
   ramp:[[-25,'#312e81'],[-10,'#3b82f6'],[0,'#93c5fd'],[10,'#a7f3d0'],[20,'#fde68a'],[28,'#f59e0b'],[35,'#dc2626']]},
  wind_speed_10m_max:{label:'Max wind (km/h)',unit:' km/h',fmt:v=>Math.round(v)+' km/h',
-  ramp:[[0,'#1e3a8a'],[10,'#0ea5e9'],[20,'#22c55e'],[30,'#eab308'],[45,'#f97316'],[60,'#dc2626']]}
+  ramp:[[0,'#1e3a8a'],[10,'#0ea5e9'],[20,'#22c55e'],[30,'#eab308'],[45,'#f97316'],[60,'#dc2626']]},
+ // air quality (Open-Meteo / CAMS, 5 days; colours follow the US AQI breakpoints)
+ us_aqi:{src:'aq',label:'Air quality (AQI)',note:'worst hour of the day',unit:'',fmt:v=>'AQI '+Math.round(v),
+  ramp:[[0,'#22c55e'],[50,'#eab308'],[100,'#f97316'],[150,'#ef4444'],[200,'#a855f7'],[300,'#7f1d1d']]},
+ pm2_5:{src:'aq',label:'Smog: PM2.5',note:'daily average',unit:' µg/m³',fmt:v=>Math.round(v)+' µg/m³',
+  ramp:[[0,'#22c55e'],[12,'#eab308'],[35,'#f97316'],[55,'#ef4444'],[150,'#a855f7'],[250,'#7f1d1d']]},
+ pm10:{src:'aq',label:'Smog: PM10',note:'daily average',unit:' µg/m³',fmt:v=>Math.round(v)+' µg/m³',
+  ramp:[[0,'#22c55e'],[54,'#eab308'],[154,'#f97316'],[254,'#ef4444'],[354,'#a855f7'],[424,'#7f1d1d']]},
+ aerosol_optical_depth:{src:'aq',label:'Aerosol (AOD)',note:'daily average · 0 clear, over 1 very hazy',unit:'',fmt:v=>v.toFixed(2)+' AOD',
+  ramp:[[0,'rgba(0,0,0,0)'],[0.1,'#fef3c7'],[0.3,'#fcd34d'],[0.6,'#f59e0b'],[1,'#b45309'],[2,'#7c2d12']]},
+ dust:{src:'aq',label:'Dust',note:'daily peak',unit:' µg/m³',fmt:v=>Math.round(v)+' µg/m³',
+  ramp:[[0,'rgba(0,0,0,0)'],[20,'#fde68a'],[50,'#f59e0b'],[100,'#d97706'],[200,'#92400e'],[500,'#451a03']]}
 };
-const pk={map:null,data:null,day:0,v:'precipitation_sum',overlay:null,labels:null,req:null};
+// US AQI categories: label, colour, short health advice
+function aqiInfo(v){
+ const t=[[50,'Good','#22c55e','Air is clean.'],[100,'Moderate','#eab308','Unusually sensitive people should limit long outdoor exertion.'],
+  [150,'Unhealthy for sensitive groups','#f97316','Children, the elderly and people with asthma or heart disease should reduce outdoor activity.'],
+  [200,'Unhealthy','#ef4444','Everyone should reduce prolonged outdoor exertion; sensitive groups stay indoors.'],
+  [300,'Very unhealthy','#a855f7','Avoid outdoor activity; wear a mask (N95) if you must go out.'],[1e9,'Hazardous','#7f1d1d','Stay indoors with windows closed; health warning for everyone.']];
+ const r=t.find(x=>v<=x[0]);return {cat:r[1],color:r[2],advice:r[3]};
+}
+const pkSet=()=>PK_VARS[pk.v].src==='aq'?pk.aq:pk.data; // dataset behind the selected variable
+const pk={map:null,data:null,aq:null,day:0,v:'precipitation_sum',overlay:null,labels:null,req:null};
 function parseColor(c){const x=document.createElement('canvas').getContext('2d');x.fillStyle=c;const s=x.fillStyle;
  if(s[0]==='#')return [parseInt(s.slice(1,3),16),parseInt(s.slice(3,5),16),parseInt(s.slice(5,7),16),255];
  const m=s.match(/[\d.]+/g).map(Number);return [m[0],m[1],m[2],Math.round((m[3]??1)*255)];}
@@ -1269,14 +1315,14 @@ function pkColor(v,stops){
  return stops[stops.length-1][1];
 }
 function pkValue(lat,lon){ // bilinear value of the selected variable/day at a point, or null outside the grid
- const g=pk.data&&pk.data.grid;if(!g)return null;
+ const D=pkSet(),g=D&&D.grid;if(!g||pk.day>=D.days.length)return null;
  const fx=(lon-g.lon0)/g.step,fy=(lat-g.lat0)/g.step;if(fx<0||fy<0||fx>g.nx-1||fy>g.ny-1)return null;
- const A=pk.data.vars[pk.v][pk.day],x0=Math.min(Math.floor(fx),g.nx-2),y0=Math.min(Math.floor(fy),g.ny-2),tx=fx-x0,ty=fy-y0;
+ const A=D.vars[pk.v][pk.day],x0=Math.min(Math.floor(fx),g.nx-2),y0=Math.min(Math.floor(fy),g.ny-2),tx=fx-x0,ty=fy-y0;
  const at=(y,x)=>A[y*g.nx+x];const q=[at(y0,x0),at(y0,x0+1),at(y0+1,x0),at(y0+1,x0+1)];if(q.some(v=>v==null))return null;
  return (q[0]*(1-tx)+q[1]*tx)*(1-ty)+(q[2]*(1-tx)+q[3]*tx)*ty;
 }
 // City labels use the city's own point forecast (the grid averages towns with surrounding mountains).
-function pkCityValue(c){const v=pk.data&&pk.data.cities&&pk.data.cities[c.n]&&pk.data.cities[c.n][pk.v];return v&&v[pk.day]!=null?v[pk.day]:pkValue(c.ll[1],c.ll[0]);}
+function pkCityValue(c){const D=pkSet(),v=D&&D.cities&&D.cities[c.n]&&D.cities[c.n][pk.v];return v&&v[pk.day]!=null?v[pk.day]:pkValue(c.ll[1],c.ll[0]);}
 function pkInit(){
  pk.map=L.map('pkMap',{zoomControl:true,attributionControl:true,minZoom:4,maxZoom:9}).fitBounds([[23.6,60.8],[37.1,77.9]]);
  L.tileLayer('https://api.mapbox.com/styles/v1/mapbox/dark-v11/tiles/512/{z}/{x}/{y}@2x?access_token='+MAPBOX_TOKEN,
@@ -1286,18 +1332,21 @@ function pkInit(){
  pk.labels=L.layerGroup().addTo(pk.map);
  pk.map.on('mousemove',e=>{const v=pkValue(e.latlng.lat,e.latlng.lng);
   document.getElementById('pkInfo').textContent=v==null?'Hover for values · click anywhere for that spot\'s full forecast':
-   e.latlng.lat.toFixed(2)+'°N '+e.latlng.lng.toFixed(2)+'°E · '+PK_VARS[pk.v].label+': '+PK_VARS[pk.v].fmt(v)+' (area average) · click for this spot\'s exact forecast';});
+   e.latlng.lat.toFixed(2)+'°N '+e.latlng.lng.toFixed(2)+'°E · '+PK_VARS[pk.v].label+': '+PK_VARS[pk.v].fmt(v)+(pk.v==='us_aqi'?' - '+aqiInfo(v).cat:'')+' (area average) · click for this spot\'s exact forecast';});
  pk.map.on('click',e=>{if(pkValue(e.latlng.lat,e.latlng.lng)==null)return;
   const lat=+e.latlng.lat.toFixed(2),lon=+e.latlng.lng.toFixed(2);
   const near=FC_CITIES.map(c=>({c,d:Math.hypot(c.ll[0]-lon,c.ll[1]-lat)})).sort((a,b)=>a.d-b.d)[0];
   openForecast({n:lat+'°N '+lon+'°E'+(near.d<1?' (near '+near.c.n+')':''),ll:[lon,lat]});});
  // day / variable buttons
  const vb=document.getElementById('pkVars');
- for(const k in PK_VARS){const b=document.createElement('button');b.type='button';b.textContent=PK_VARS[k].label;b.dataset.v=k;b.onclick=()=>{pk.v=k;pkDraw();};vb.appendChild(b);}
+ const ab=document.getElementById('pkAqVars');
+ for(const k in PK_VARS){const b=document.createElement('button');b.type='button';b.textContent=PK_VARS[k].label;b.dataset.v=k;b.onclick=()=>{pk.v=k;pkDraw();};(PK_VARS[k].src==='aq'?ab:vb).appendChild(b);}
 }
 async function pkShow(){
  if(!pk.map)pkInit();
  setTimeout(()=>pk.map.invalidateSize(),50);
+ if(!pk.aq||Date.now()-(pk.aqAt||0)>30*60000) // air quality loads alongside; a failure only affects the air views
+  fetch('/api/aqmap').then(r=>r.ok?r.json():null).then(js=>{if(js){pk.aq=js;pk.aqAt=Date.now();pkDraw();}}).catch(()=>{});
  if(pk.data&&!pk.data.stale&&Date.now()-pk.loadedAt<30*60000){pkDraw();return;}
  const msg=document.getElementById('pkMsg');
  try{
@@ -1313,9 +1362,15 @@ async function pkShow(){
 }
 function pkDraw(){
  if(!pk.data)return;
- document.querySelectorAll('#pkDays button').forEach(b=>b.classList.toggle('on',+b.dataset.day===pk.day));
- document.querySelectorAll('#pkVars button').forEach(b=>b.classList.toggle('on',b.dataset.v===pk.v));
- const g=pk.data.grid,V=PK_VARS[pk.v],S=g.lat0,N=g.lat0+(g.ny-1)*g.step,W=g.lon0,E=g.lon0+(g.nx-1)*g.step;
+ const D=pkSet();
+ document.querySelectorAll('#pkDays button').forEach(b=>{b.classList.toggle('on',+b.dataset.day===pk.day);b.classList.toggle('na',!!D&&+b.dataset.day>=D.days.length);});
+ document.querySelectorAll('#pkVars button,#pkAqVars button').forEach(b=>b.classList.toggle('on',b.dataset.v===pk.v));
+ if(!D||pk.day>=D.days.length){ // air data not loaded yet, or a day beyond its 5-day range
+  if(pk.overlay){pk.map.removeLayer(pk.overlay);pk.overlay=null;}pk.labels.clearLayers();
+  document.getElementById('pkLegend').innerHTML=D?'Air-quality forecasts cover the next '+D.days.length+' days - pick an earlier day.':'Air-quality data is loading - it appears in a moment.';
+  return;
+ }
+ const g=D.grid,V=PK_VARS[pk.v],S=g.lat0,N=g.lat0+(g.ny-1)*g.step,W=g.lon0,E=g.lon0+(g.nx-1)*g.step;
  // canvas in Web Mercator rows so it lines up with the map
  const my=lat=>Math.log(Math.tan(Math.PI/4+lat*Math.PI/360)),yN=my(N),yS=my(S),w=520,h=Math.round(w*(yN-yS)/((E-W)*Math.PI/180));
  const cv=document.createElement('canvas');cv.width=w;cv.height=h;const x=cv.getContext('2d'),img=x.createImageData(w,h),px=img.data;
@@ -1335,10 +1390,10 @@ function pkDraw(){
  FC_CITIES.forEach(c=>{const v=pkCityValue(c);if(v==null)return;
   L.marker([c.ll[1],c.ll[0]],{interactive:false,pane:'pkTop',icon:L.divIcon({className:'',html:'<div class="pkCity">'+V.fmt(v)+'<br><small>'+c.n+'</small></div>',iconSize:[0,0]})}).addTo(pk.labels);});
  // legend
- const st=V.ramp;document.getElementById('pkLegend').innerHTML='<b style="color:var(--ink)">'+V.label+' · '+document.querySelector('#pkDays .on').textContent+'</b>'+
+ const st=V.ramp;document.getElementById('pkLegend').innerHTML='<b style="color:var(--ink)">'+V.label+(V.note?' ('+V.note+')':'')+' · '+document.querySelector('#pkDays .on').textContent+'</b>'+
   '<div class="bar" style="background:linear-gradient(90deg,'+st.map(([v,c],i)=>c+' '+(i/(st.length-1)*100)+'%').join(',')+')"></div>'+
   '<div class="ticks">'+st.map(([v])=>'<span>'+v+'</span>').join('')+'</div>'+
-  '<div style="margin-top:4px">Open-Meteo · updated '+pk.data.fetched+(pk.data.stale?' (refreshing)':'')+'</div>';
+  '<div style="margin-top:4px">'+(V.src==='aq'?'Open-Meteo / CAMS air quality':'Open-Meteo')+' · updated '+D.fetched+(D.stale?' (refreshing)':'')+'</div>';
 }
 function closeForecast(){mb.modal.classList.remove('on');}
 document.getElementById('mbBtn').addEventListener('click',()=>openForecast());
@@ -1700,7 +1755,7 @@ function aiSnapshot(){
  const scores={};for(const id in SCORE_NAME)scores[SCORE_NAME[id]]={score:txt('sc_'+id),status:txt('sub_'+id)};
  const js=jetSeries();
  return {
-  date:new Date().toISOString().slice(0,10),time_pkt:txt('clock'),view:mode3d?'3D globe':terrainOn?'3D terrain':'2D map',forecast_window_open:mb.modal.classList.contains('on'),forecast_map:mb.modal.classList.contains('on')&&document.querySelector('.fcView[data-view="map"]').classList.contains('on')&&pk.data?{day:pk.data.days[pk.day],showing:PK_VARS[pk.v].label,city_values:Object.fromEntries(FC_CITIES.map(c=>[c.n,pkCityValue(c)]).filter(([,v])=>v!=null).map(([n,v])=>[n,Math.round(v*10)/10]))}:null,forecast_shown:mb.modal.classList.contains('on')&&mb.data?{city:mb.data.city,now:{temp_c:mb.data.current.temperature_2m,feels_c:mb.data.current.apparent_temperature,sky:wmo(mb.data.current.weather_code,mb.data.current.is_day)[1],wind_kmh:mb.data.current.wind_speed_10m,gust_kmh:mb.data.current.wind_gusts_10m,humidity_pct:mb.data.current.relative_humidity_2m},days:mb.data.daily.time.map((t,i)=>({date:t,sky:wmo(mb.data.daily.weather_code[i])[1],max_c:mb.data.daily.temperature_2m_max[i],min_c:mb.data.daily.temperature_2m_min[i],rain_mm:mb.data.daily.precipitation_sum[i],rain_chance_pct:mb.data.daily.precipitation_probability_max[i],wind_max_kmh:mb.data.daily.wind_speed_10m_max[i],uv:mb.data.daily.uv_index_max[i]})),source:'Open-Meteo'}:null,
+  date:new Date().toISOString().slice(0,10),time_pkt:txt('clock'),view:mode3d?'3D globe':terrainOn?'3D terrain':'2D map',forecast_window_open:mb.modal.classList.contains('on'),forecast_map:mb.modal.classList.contains('on')&&document.querySelector('.fcView[data-view="map"]').classList.contains('on')&&pk.data?{day:pk.data.days[pk.day],showing:PK_VARS[pk.v].label,city_values:Object.fromEntries(FC_CITIES.map(c=>[c.n,pkCityValue(c)]).filter(([,v])=>v!=null).map(([n,v])=>[n,Math.round(v*10)/10]))}:null,forecast_shown:mb.modal.classList.contains('on')&&mb.data?{city:mb.data.city,now:{temp_c:mb.data.current.temperature_2m,feels_c:mb.data.current.apparent_temperature,sky:wmo(mb.data.current.weather_code,mb.data.current.is_day)[1],wind_kmh:mb.data.current.wind_speed_10m,gust_kmh:mb.data.current.wind_gusts_10m,humidity_pct:mb.data.current.relative_humidity_2m},days:mb.data.daily.time.map((t,i)=>({date:t,sky:wmo(mb.data.daily.weather_code[i])[1],max_c:mb.data.daily.temperature_2m_max[i],min_c:mb.data.daily.temperature_2m_min[i],rain_mm:mb.data.daily.precipitation_sum[i],rain_chance_pct:mb.data.daily.precipitation_probability_max[i],wind_max_kmh:mb.data.daily.wind_speed_10m_max[i],uv:mb.data.daily.uv_index_max[i]})),air_quality_now:mb.air||null,source:'Open-Meteo (weather), CAMS (air)'}:null,
   active_layer:txt('activeTitle').replace('Active layer: ',''),map_layer_source:txt('liveSrc'),
   driver_card_open:dvm.classList.contains('on')?txt('dvmTitle'):null,
   influence_scores:scores,

@@ -12,6 +12,7 @@ The chat panel can use two assistants with the same portal data:
 Keys stay on this machine; the browser never sees them.
 """
 import datetime as dt
+import http.client
 import io
 import json
 import math
@@ -82,6 +83,12 @@ PORTAL LAYOUT
   and a 48-hour chart of temperature, rain and wind. When the forecast window is open, the page snapshot
   includes the shown city's forecast as "forecast_shown" - quote it when asked about upcoming weather.
   These are model forecasts, not official warnings.
+- Air quality (same Forecast window, from Open-Meteo / Copernicus CAMS, 5 days): the map's "Air" row shows US AQI,
+  smog particles PM2.5 and PM10 (µg/m³), aerosol optical depth (AOD: haze in the whole air column, 0 clear,
+  >1 very hazy) and dust. The city/point view has an air card ("air_quality_now" in the snapshot) with AQI,
+  category, health advice and the worst AQI in the next 24 h. US AQI bands: 0-50 Good, 51-100 Moderate,
+  101-150 Unhealthy for sensitive groups, 151-200 Unhealthy, 201-300 Very unhealthy, 301+ Hazardous. Give health
+  advice from these bands; for official smog alerts refer people to the Punjab EPD / Pak-EPA.
 
 DRIVERS (key: name - what the data series is)
 - enso: ENSO - Niño 3.4 sea-surface temperature anomaly (°C). >=+0.5 El Niño, <=-0.5 La Niña, else neutral.
@@ -152,9 +159,20 @@ def open_meteo_json(url, points):
                 break
             wait = 60 - (now - _om_recent[0][0]) + 0.5
         time.sleep(wait)
+    # Retry dropped connections, truncated replies and 5xx errors (up to 3 tries). 4xx answers such as 429
+    # "limit reached" are raised at once - retrying them would only use up more of the quota.
     req = urllib.request.Request(url, headers={'User-Agent': 'PakClimateDashboard/1.0'})
-    with urllib.request.urlopen(req, timeout=90) as r:
-        return json.loads(r.read())
+    for attempt in range(3):
+        try:
+            with urllib.request.urlopen(req, timeout=90) as r:
+                return json.loads(r.read())
+        except urllib.error.HTTPError as e:
+            if e.code < 500 or attempt == 2:
+                raise
+        except (http.client.HTTPException, urllib.error.URLError, TimeoutError, ConnectionError, ValueError):
+            if attempt == 2:
+                raise
+        time.sleep(5 * (attempt + 1) ** 2)  # 5 s, then 20 s
 
 
 # ---- Shared upper-level wind (jet stream / western disturbances) ----
@@ -364,6 +382,132 @@ def get_pak_grid():
     return None, _pak_status
 
 
+# ---- Air quality: AQI, smog particles (PM2.5 / PM10), aerosol optical depth, dust (Open-Meteo / CAMS, free) ----
+# Whole-Pakistan grid: same points as the weather grid, 5 days, hourly values reduced to daily figures here
+# (AQI = daily worst hour; PM2.5, PM10, AOD = daily mean; dust = daily max). CAMS updates twice a day, so the
+# grid is refreshed every 12 h (~1,000 calls/day) and kept on disk. Single points are cached for 60 min.
+AQ_URL = 'https://air-quality-api.open-meteo.com/v1/air-quality'
+AQ_HOURLY = ['us_aqi', 'pm2_5', 'pm10', 'aerosol_optical_depth', 'dust']
+AQ_DAILY = {'us_aqi': max, 'pm2_5': 'mean', 'pm10': 'mean', 'aerosol_optical_depth': 'mean', 'dust': max}
+AQ_CACHE = os.path.join(ROOT, 'lib', 'aq_cache.json')
+AQ_MAX_AGE = 12 * 3600
+AQ_POINT_MAX_AGE = 60 * 60
+_aq_status = 'The air-quality map is being prepared (a few minutes after the server starts)'
+_aq_points = {}
+_aq_lock = threading.Lock()
+
+
+def _aq_daily(hourly, days):
+    """Reduce one location's hourly series to one value per day."""
+    out = {}
+    for v, how in AQ_DAILY.items():
+        vals, times = hourly.get(v) or [], hourly.get('time') or []
+        per_day = []
+        for day in days:
+            xs = [x for t, x in zip(times, vals) if t.startswith(day) and x is not None]
+            if not xs:
+                per_day.append(None)
+            elif how == 'mean':
+                per_day.append(round(sum(xs) / len(xs), 3 if v == 'aerosol_optical_depth' else 1))
+            else:
+                per_day.append(round(how(xs), 1))
+        out[v] = per_day
+    return out
+
+
+def _fetch_aq_grid():
+    g = PAK_GRID
+    out = {v: None for v in AQ_DAILY}
+    days = None
+
+    def fetch(la, lo):
+        url = (f'{AQ_URL}?latitude=' + ','.join(map(str, la)) + '&longitude=' + ','.join(map(str, lo))
+               + '&timezone=Asia%2FKarachi&forecast_days=5&hourly=' + ','.join(AQ_HOURLY))
+        js = open_meteo_json(url, len(la))
+        js = js if isinstance(js, list) else [js]
+        if len(js) != len(la):
+            raise ValueError(f'air-quality service returned {len(js)} points, expected {len(la)}')
+        return js
+
+    for j0 in range(0, g['ny'], 2):  # 2 rows = 52 points: hourly replies are large, keep each one small
+        la, lo = [], []
+        for j in range(j0, min(j0 + 2, g['ny'])):
+            for i in range(g['nx']):
+                la.append(round(g['lat0'] + j * g['step'], 2))
+                lo.append(round(g['lon0'] + i * g['step'], 2))
+        for o in fetch(la, lo):
+            h = o.get('hourly') or {}
+            days = days or sorted({t[:10] for t in h.get('time', [])})
+            daily = _aq_daily(h, days)
+            for v in AQ_DAILY:
+                if out[v] is None:
+                    out[v] = [[] for _ in days]
+                for d, x in enumerate(daily[v]):
+                    out[v][d].append(x)
+    names = list(PAK_CITIES)
+    cities = {n: _aq_daily(o.get('hourly') or {}, days)
+              for n, o in zip(names, fetch([PAK_CITIES[n][0] for n in names], [PAK_CITIES[n][1] for n in names]))}
+    return {'fetched': dt.datetime.now(dt.timezone.utc).strftime('%Y-%m-%d %H:%M UTC'), 'grid': g, 'days': days,
+            'vars': out, 'cities': cities}
+
+
+def _refresh_aq_forever():
+    global _aq_status
+    while True:
+        try:
+            age = time.time() - os.path.getmtime(AQ_CACHE)
+        except OSError:
+            age = AQ_MAX_AGE
+        if age >= AQ_MAX_AGE:
+            try:
+                fresh = _fetch_aq_grid()
+                tmp = AQ_CACHE + '.tmp'
+                with open(tmp, 'w', encoding='utf-8') as f:
+                    json.dump(fresh, f, separators=(',', ':'))
+                os.replace(tmp, AQ_CACHE)
+                _aq_status = ''
+                print(f'Air-quality grid refreshed ({fresh["fetched"]})', flush=True)
+            except Exception as e:  # keep the last good copy; retry later
+                _aq_status = f'Air-quality map temporarily unavailable ({e})'
+                print(_aq_status, flush=True)
+                time.sleep(WIND_RETRY_AFTER)
+                continue
+        time.sleep(600)
+
+
+def get_aq_grid():
+    try:
+        with open(AQ_CACHE, encoding='utf-8') as f:
+            payload = json.load(f)
+        if payload.get('grid') == PAK_GRID:
+            payload['stale'] = time.time() - os.path.getmtime(AQ_CACHE) >= AQ_MAX_AGE
+            return payload, None
+    except (OSError, ValueError):
+        pass
+    return None, _aq_status
+
+
+def get_aq_point(lat, lon):
+    """Current air quality + next 48 h for one point, cached for AQ_POINT_MAX_AGE (stale copy if the service fails)."""
+    key = (round(lat, 2), round(lon, 2))
+    with _aq_lock:
+        hit = _aq_points.get(key)
+    if hit and time.time() - hit[0] < AQ_POINT_MAX_AGE:
+        return hit[1], None
+    try:
+        url = (f'{AQ_URL}?latitude={key[0]}&longitude={key[1]}&timezone=Asia%2FKarachi&forecast_days=3'
+               '&current=us_aqi,pm2_5,pm10,aerosol_optical_depth,dust,ozone,nitrogen_dioxide&hourly=us_aqi,pm2_5')
+        payload = open_meteo_json(url, 1)
+        payload['fetched'] = dt.datetime.now(dt.timezone.utc).strftime('%Y-%m-%d %H:%M UTC')
+        with _aq_lock:
+            _aq_points[key] = (time.time(), payload)
+        return payload, None
+    except (urllib.error.URLError, OSError, ValueError) as e:
+        if hit:
+            return dict(hit[1], stale=True), None
+        return None, f'Air-quality service unavailable ({e})'
+
+
 DATA_MAX_AGE = 24 * 3600  # refresh lib/indices.js once a day
 
 
@@ -454,66 +598,50 @@ class Handler(SimpleHTTPRequestHandler):
         self.end_headers()
         return io.BytesIO(data)
 
+    def send_json(self, payload, error=None, max_age=0):
+        """JSON reply; 503 with the error when there is no payload. max_age lets the browser reuse the answer
+        for that many seconds without asking again (browser-side buffering on top of the server caches)."""
+        body = json.dumps(payload if payload is not None else {'error': error}, separators=(',', ':')).encode('utf-8')
+        self.send_response(200 if payload is not None else 503)
+        self.send_header('Content-Type', 'application/json')
+        self.send_header('Content-Length', str(len(body)))
+        self.send_header('Cache-Control', f'max-age={max_age}' if payload is not None and max_age else 'no-cache')
+        self.end_headers()
+        self.wfile.write(body)
+
+    def query_latlon(self):
+        q = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
+        try:
+            lat, lon = float(q['lat'][0]), float(q['lon'][0])
+            if -90 <= lat <= 90 and -180 <= lon <= 180:
+                return lat, lon
+        except (KeyError, ValueError, IndexError):
+            pass
+        self.send_error(400, 'Expected ?lat=..&lon=..')
+        return None
+
     def do_GET(self):
         route = self.path.split('?')[0]
         if route == '/api/pakforecast':
-            payload, error = get_pak_grid()
-            body = json.dumps(payload if payload else {'error': error}, separators=(',', ':')).encode('utf-8')
-            self.send_response(200 if payload else 503)
-            self.send_header('Content-Type', 'application/json')
-            self.send_header('Content-Length', str(len(body)))
-            self.send_header('Cache-Control', 'no-cache')
-            self.end_headers()
-            self.wfile.write(body)
+            return self.send_json(*get_pak_grid(), max_age=300)
+        if route == '/api/aqmap':
+            return self.send_json(*get_aq_grid(), max_age=300)
+        if route in ('/api/forecast', '/api/airquality'):
+            ll = self.query_latlon()
+            if ll:
+                self.send_json(*(get_forecast(*ll) if route == '/api/forecast' else get_aq_point(*ll)), max_age=300)
             return
-        if route == '/api/forecast':
-            q = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
-            try:
-                lat, lon = float(q['lat'][0]), float(q['lon'][0])
-                if not (-90 <= lat <= 90 and -180 <= lon <= 180):
-                    raise ValueError
-            except (KeyError, ValueError, IndexError):
-                self.send_error(400, 'Expected ?lat=..&lon=..')
-                return
-            payload, error = get_forecast(lat, lon)
-            body = json.dumps(payload if payload else {'error': error}).encode('utf-8')
-            self.send_response(200 if payload else 503)
-            self.send_header('Content-Type', 'application/json')
-            self.send_header('Content-Length', str(len(body)))
-            self.send_header('Cache-Control', 'no-cache')
-            self.end_headers()
-            self.wfile.write(body)
-            return
+        if route == '/api/wind':
+            return self.send_json(*get_wind(), max_age=300)
         if route == '/api/ai-status':
             # Which assistants can answer through this server. Only yes/no - the keys never leave the machine.
             # Without a key the page uses that AI free through Puter instead.
-            body = json.dumps({'claude': bool(os.environ.get('ANTHROPIC_API_KEY') or os.environ.get('ANTHROPIC_AUTH_TOKEN')),
-                               'grok': bool(os.environ.get('XAI_API_KEY'))}).encode('utf-8')
-            self.send_response(200)
-            self.send_header('Content-Type', 'application/json')
-            self.send_header('Content-Length', str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
-            return
+            return self.send_json({'claude': bool(os.environ.get('ANTHROPIC_API_KEY') or os.environ.get('ANTHROPIC_AUTH_TOKEN')),
+                                   'grok': bool(os.environ.get('XAI_API_KEY'))})
         if route == '/api/guide':
             # Same instructions and data Claude and Grok receive, for the in-browser (Puter) assistant. No secrets.
-            body = json.dumps({'text': PORTAL_GUIDE + load_data()}).encode('utf-8')
-            self.send_response(200)
-            self.send_header('Content-Type', 'application/json')
-            self.send_header('Content-Length', str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
-            return
-        if route != '/api/wind':
-            return super().do_GET()
-        payload, error = get_wind()
-        body = json.dumps(payload if payload else {'error': error}).encode('utf-8')
-        self.send_response(200 if payload else 503)
-        self.send_header('Content-Type', 'application/json')
-        self.send_header('Content-Length', str(len(body)))
-        self.send_header('Cache-Control', 'no-cache')
-        self.end_headers()
-        self.wfile.write(body)
+            return self.send_json({'text': PORTAL_GUIDE + load_data()})
+        return super().do_GET()
 
     def send_event(self, kind, payload):
         self.wfile.write(f'event: {kind}\ndata: {json.dumps(payload)}\n\n'.encode('utf-8'))
@@ -637,4 +765,5 @@ if __name__ == '__main__':
     threading.Thread(target=_refresh_wind_forever, daemon=True).start()
     threading.Thread(target=_refresh_climate_data_forever, daemon=True).start()
     threading.Thread(target=_refresh_pak_grid_forever, daemon=True).start()
+    threading.Thread(target=_refresh_aq_forever, daemon=True).start()
     ThreadingHTTPServer(('127.0.0.1', PORT), Handler).serve_forever()
