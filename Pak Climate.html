@@ -277,7 +277,7 @@ body.aiOpen #aiFab{display:none}
   <div class="status">
     <div class="pill pill-info"><span class="dot"></span><span class="live">SYSTEM ONLINE</span></div>
     <button class="pill viewbtn aibtn" id="aiBtn" type="button" title="Ask the AI assistant about this portal">✨ Ask AI</button>
-    <button class="pill viewbtn mbbtn" id="mbBtn" type="button" title="Live weather map and 7-day city forecasts from meteoblue">🌦 Forecast</button>
+    <button class="pill viewbtn mbbtn" id="mbBtn" type="button" title="Live weather map and 7-day city forecasts">🌦 Forecast</button>
     <button class="pill viewbtn terrainbtn" id="terrainBtn" type="button" title="3D mountain terrain of Pakistan">⛰ Terrain</button>
     <button class="pill viewbtn" id="viewBtn" type="button">🌐 3D</button>
     <div class="pill" id="clock">--:-- PKT</div>
@@ -342,28 +342,28 @@ body.aiOpen #aiFab{display:none}
 </div></div>
 <div id="toast"></div>
 
-<div id="mbModal" role="dialog" aria-label="meteoblue weather forecast">
+<div id="mbModal" role="dialog" aria-label="Weather forecast">
  <div class="dvmCard mbCard">
   <div class="dvmHead">
    <span class="dvmChip" style="background:#35d9ff;color:#35d9ff"></span>
-   <div><div class="dvmTitle">Weather forecast</div><div class="dvmSub">Free widgets by meteoblue · updated by meteoblue</div></div>
+   <div><div class="dvmTitle">Weather forecast</div><div class="dvmSub">Live weather map · city forecasts</div></div>
    <div class="mbTabs"><button type="button" data-tab="map" class="on">🗺 Live weather map</button><button type="button" data-tab="city">📅 City forecast</button></div>
    <button id="mbClose" class="aiIcon" type="button" title="Close">✕</button>
   </div>
   <div class="mbPane on" data-pane="map">
-   <iframe id="mbMapFrame" title="meteoblue weather maps" sandbox="allow-same-origin allow-scripts allow-popups allow-popups-to-escape-sandbox" loading="lazy"></iframe>
-   <div class="mbCredit"><a href="https://www.meteoblue.com/en/weather/maps/islamabad_pakistan_1176615?utm_source=map_widget&utm_medium=linkus&utm_content=map&utm_campaign=Weather%2BWidget" target="_blank" rel="noopener">meteoblue</a> · wind, rain, clouds, temperature and satellite layers — use the menu inside the map to switch</div>
+   <iframe id="mbMapFrame" title="Live weather map" sandbox="allow-same-origin allow-scripts allow-popups allow-popups-to-escape-sandbox" loading="lazy"></iframe>
+   <div class="mbCredit"><a href="https://www.meteoblue.com/en/weather/maps/islamabad_pakistan_1176615?utm_source=map_widget&utm_medium=linkus&utm_content=map&utm_campaign=Weather%2BWidget" target="_blank" rel="noopener">meteoblue</a></div>
   </div>
   <div class="mbPane" data-pane="city">
    <div class="mbCities" id="mbCities"></div>
    <div class="mbGrid">
     <div class="mbCol"><div class="mbColHead">Now &amp; 3-hourly</div>
-     <iframe id="mbThreeFrame" title="meteoblue current weather and 3-hourly forecast" sandbox="allow-same-origin allow-scripts allow-popups allow-popups-to-escape-sandbox"></iframe></div>
+     <iframe id="mbThreeFrame" title="Current weather and 3-hourly forecast" sandbox="allow-same-origin allow-scripts allow-popups allow-popups-to-escape-sandbox"></iframe></div>
     <div class="mbCol"><div class="mbColHead">7-day forecast</div>
-     <iframe id="mbDailyFrame" title="meteoblue 7-day forecast" sandbox="allow-same-origin allow-scripts allow-popups allow-popups-to-escape-sandbox"></iframe></div>
+     <iframe id="mbDailyFrame" title="7-day forecast" sandbox="allow-same-origin allow-scripts allow-popups allow-popups-to-escape-sandbox"></iframe></div>
    </div>
    <div class="mbMore" id="mbMore"></div>
-   <div class="mbCredit"><a id="mbDailyCredit" href="https://www.meteoblue.com/" target="_blank" rel="noopener">meteoblue</a> · forecasts by meteoblue</div>
+   <div class="mbCredit"><a id="mbDailyCredit" href="https://www.meteoblue.com/" target="_blank" rel="noopener">meteoblue</a></div>
   </div>
  </div>
 </div>
@@ -1004,7 +1004,7 @@ function initTerrain(){
   }
  });
  MB_CITIES.forEach(c=>{
-  const el=document.createElement('div');el.className='tCity';el.textContent=c.n;el.title='Open the 7-day meteoblue forecast for '+c.n;
+  const el=document.createElement('div');el.className='tCity';el.textContent=c.n;el.title='Open the 7-day forecast for '+c.n;
   el.addEventListener('click',e=>{e.stopPropagation();openMeteoblue('city',c.id);});
   new mapboxgl.Marker({element:el,anchor:'left'}).setLngLat(c.ll).addTo(tmap);
  });
