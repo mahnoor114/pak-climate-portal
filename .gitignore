@@ -10,3 +10,4 @@ __pycache__/
 *.pyc
 lib/wind_cache.json
 lib/*.tmp
+lib/pak_forecast_cache.json

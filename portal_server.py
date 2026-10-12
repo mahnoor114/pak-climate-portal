@@ -73,7 +73,10 @@ PORTAL LAYOUT
   heights exaggerated 1.7x) that slowly rotates. Its "Fly to" bar visits K2 & Karakoram, Nanga Parbat,
   Hunza, Hindu Kush, Tarbela Dam, Islamabad, Quetta, the Indus Delta and all of Pakistan. City labels
   open that city's forecast. Purely visual.
-- "🌦 Forecast" button: weather forecasts for 14 Pakistani cities from Open-Meteo (free; global weather
+- "🌦 Forecast" button opens on a whole-Pakistan forecast map (Open-Meteo 0.75° grid covering the official
+  boundary, 7 days): pick a day and Rain / Chance of rain / Max temp / Min temp / Max wind; hover for values,
+  click anywhere for that spot's full forecast. When this map is open the snapshot has "forecast_map" with the
+  day, variable and each city's value. Its second tab has forecasts for 14 Pakistani cities from Open-Meteo (free; global weather
   models such as ECMWF, GFS and DWD ICON, best model chosen per location), refreshed at most every 30 min:
   current conditions, a 7-day outlook (high/low, rain amount and chance, wind, gusts, UV, sunrise/sunset)
   and a 48-hour chart of temperature, rain and wind. When the forecast window is open, the page snapshot
@@ -129,6 +132,31 @@ def load_data():
 
 client = anthropic.Anthropic()
 
+# ---- Open-Meteo rate limiting ----
+# Open-Meteo's free plan counts every location in a request as one call: ~600/minute and ~10,000/day per IP.
+# Every Open-Meteo request (wind, Pakistan grid, city forecasts) goes through open_meteo_json(), which keeps
+# the total under OM_POINTS_PER_MINUTE by waiting when needed.
+OM_POINTS_PER_MINUTE = 400
+_om_lock = threading.Lock()
+_om_recent = []  # (timestamp, points)
+
+
+def open_meteo_json(url, points):
+    while True:
+        with _om_lock:
+            now = time.time()
+            _om_recent[:] = [(t, n) for t, n in _om_recent if now - t < 60]
+            used = sum(n for _, n in _om_recent)
+            if used + points <= OM_POINTS_PER_MINUTE or not _om_recent:
+                _om_recent.append((now, points))
+                break
+            wait = 60 - (now - _om_recent[0][0]) + 0.5
+        time.sleep(wait)
+    req = urllib.request.Request(url, headers={'User-Agent': 'PakClimateDashboard/1.0'})
+    with urllib.request.urlopen(req, timeout=90) as r:
+        return json.loads(r.read())
+
+
 # ---- Shared upper-level wind (jet stream / western disturbances) ----
 # Open-Meteo counts every grid point as one API call against a free limit of ~10,000/day per IP, so
 # browsers must not each fetch it. The global 7.5° grid below is 1,008 points; refreshing every 6 h
@@ -139,7 +167,6 @@ WIND_MAX_AGE = 6 * 3600
 WIND_RETRY_AFTER = 30 * 60   # wait this long after a failed fetch
 WG = dict(lat0=-75, lon0=-180, step=7.5, ny=21, nx=48)  # whole globe: 75°S-75°N, 180°W-172.5°E
 WIND_ROWS_PER_REQUEST = 3    # 144 points per request keeps the URL short
-WIND_REQUEST_GAP = 20        # seconds between requests: ~430 points/min, under the ~600/min limit
 _wind_lock = threading.Lock()
 
 
@@ -154,11 +181,7 @@ def _fetch_wind():
                 lo.append(WG['lon0'] + i * WG['step'])
         url = ('https://api.open-meteo.com/v1/gfs?latitude=' + ','.join(map(str, la)) + '&longitude=' + ','.join(map(str, lo))
                + '&current=wind_speed_250hPa,wind_direction_250hPa,wind_speed_500hPa,wind_direction_500hPa&wind_speed_unit=ms')
-        req = urllib.request.Request(url, headers={'User-Agent': 'PakClimateDashboard/1.0'})
-        if j0:
-            time.sleep(WIND_REQUEST_GAP)
-        with urllib.request.urlopen(req, timeout=90) as r:
-            js = json.loads(r.read())
+        js = open_meteo_json(url, len(la))
         js = js if isinstance(js, list) else [js]
         if len(js) != len(la):
             raise ValueError(f'Open-Meteo returned {len(js)} points, expected {len(la)}')
@@ -240,9 +263,7 @@ def get_forecast(lat, lon):
     if hit and time.time() - hit[0] < FORECAST_MAX_AGE:
         return hit[1], None
     try:
-        req = urllib.request.Request(FORECAST_URL.format(lat=key[0], lon=key[1]), headers={'User-Agent': 'PakClimateDashboard/1.0'})
-        with urllib.request.urlopen(req, timeout=30) as r:
-            payload = json.loads(r.read())
+        payload = open_meteo_json(FORECAST_URL.format(lat=key[0], lon=key[1]), 1)
         payload['fetched'] = dt.datetime.now(dt.timezone.utc).strftime('%Y-%m-%d %H:%M UTC')
         with _forecast_lock:
             _forecasts[key] = (time.time(), payload)
@@ -251,6 +272,96 @@ def get_forecast(lat, lon):
         if hit:
             return dict(hit[1], stale=True), None
         return None, f'Forecast service unavailable ({e})'
+
+
+# ---- Whole-Pakistan daily forecast grid (Open-Meteo) ----
+# 0.75° grid (~80 km) covering Pakistan's official boundary (incl. Jammu & Kashmir): 20 x 26 = 520 points, 7 days.
+# Refreshed in the background every 6 h (~2,100 calls/day); the page draws it as a smooth colour map clipped to the boundary.
+PAK_GRID = dict(lat0=23.5, lon0=60.75, step=0.75, ny=20, nx=26)   # 23.5-37.75°N, 60.75-79.5°E
+PAK_CACHE = os.path.join(ROOT, 'lib', 'pak_forecast_cache.json')
+PAK_CITIES = {  # name: (lat, lon) - same as FC_CITIES in Pak Climate.html
+    'Islamabad': (33.69, 73.05), 'Lahore': (31.55, 74.34), 'Karachi': (24.86, 67.01), 'Peshawar': (34.01, 71.58),
+    'Quetta': (30.18, 66.99), 'Multan': (30.20, 71.47), 'Faisalabad': (31.42, 73.08), 'Hyderabad': (25.40, 68.37),
+    'Sukkur': (27.70, 68.86), 'Gwadar': (25.13, 62.32), 'Muzaffarabad': (34.37, 73.47), 'Gilgit': (35.92, 74.31),
+    'Skardu': (35.30, 75.63), 'Chitral': (35.85, 71.79)}
+PAK_MAX_AGE = 6 * 3600
+PAK_VARS = ['weather_code', 'temperature_2m_max', 'temperature_2m_min', 'precipitation_sum',
+            'precipitation_probability_max', 'wind_speed_10m_max']
+_pak_status = 'The Pakistan forecast map is being prepared (about 1 minute after the server starts)'
+
+
+def _fetch_pak_grid():
+    g = PAK_GRID
+    out = {v: None for v in PAK_VARS}
+    days = None
+    for j0 in range(0, g['ny'], 5):  # 5 rows = 130 points per request
+        la, lo = [], []
+        for j in range(j0, min(j0 + 5, g['ny'])):
+            for i in range(g['nx']):
+                la.append(round(g['lat0'] + j * g['step'], 2))
+                lo.append(round(g['lon0'] + i * g['step'], 2))
+        url = ('https://api.open-meteo.com/v1/forecast?latitude=' + ','.join(map(str, la)) + '&longitude=' + ','.join(map(str, lo))
+               + '&timezone=Asia%2FKarachi&forecast_days=7&wind_speed_unit=kmh&daily=' + ','.join(PAK_VARS))
+        js = open_meteo_json(url, len(la))
+        js = js if isinstance(js, list) else [js]
+        if len(js) != len(la):
+            raise ValueError(f'Open-Meteo returned {len(js)} points, expected {len(la)}')
+        for o in js:
+            daily = o.get('daily') or {}
+            days = days or daily.get('time')
+            for v in PAK_VARS:
+                vals = daily.get(v) or [None] * len(days or [])
+                if out[v] is None:
+                    out[v] = [[] for _ in vals]
+                for d, x in enumerate(vals):
+                    out[v][d].append(x)
+    # The ~80 km grid averages a mountain town with the peaks around it, so the city labels on the map use
+    # each city's own point forecast (one extra request). Names and coordinates match FC_CITIES in the page.
+    names = list(PAK_CITIES)
+    url = ('https://api.open-meteo.com/v1/forecast?latitude=' + ','.join(str(PAK_CITIES[n][0]) for n in names)
+           + '&longitude=' + ','.join(str(PAK_CITIES[n][1]) for n in names)
+           + '&timezone=Asia%2FKarachi&forecast_days=7&wind_speed_unit=kmh&daily=' + ','.join(PAK_VARS))
+    js = open_meteo_json(url, len(names))
+    js = js if isinstance(js, list) else [js]
+    cities = {n: {v: (o.get('daily') or {}).get(v) for v in PAK_VARS} for n, o in zip(names, js)}
+    return {'fetched': dt.datetime.now(dt.timezone.utc).strftime('%Y-%m-%d %H:%M UTC'), 'grid': g, 'days': days,
+            'vars': out, 'cities': cities}
+
+
+def _refresh_pak_grid_forever():
+    global _pak_status
+    while True:
+        try:
+            age = time.time() - os.path.getmtime(PAK_CACHE)
+        except OSError:
+            age = PAK_MAX_AGE
+        if age >= PAK_MAX_AGE:
+            try:
+                fresh = _fetch_pak_grid()
+                tmp = PAK_CACHE + '.tmp'
+                with open(tmp, 'w', encoding='utf-8') as f:
+                    json.dump(fresh, f, separators=(',', ':'))
+                os.replace(tmp, PAK_CACHE)
+                _pak_status = ''
+                print(f'Pakistan forecast grid refreshed ({fresh["fetched"]})', flush=True)
+            except Exception as e:  # keep the last good copy; retry later
+                _pak_status = f'Pakistan forecast temporarily unavailable ({e})'
+                print(_pak_status, flush=True)
+                time.sleep(WIND_RETRY_AFTER)
+                continue
+        time.sleep(300)
+
+
+def get_pak_grid():
+    try:
+        with open(PAK_CACHE, encoding='utf-8') as f:
+            payload = json.load(f)
+        if payload.get('grid') == PAK_GRID:
+            payload['stale'] = time.time() - os.path.getmtime(PAK_CACHE) >= PAK_MAX_AGE
+            return payload, None
+    except (OSError, ValueError):
+        pass
+    return None, _pak_status
 
 
 DATA_MAX_AGE = 24 * 3600  # refresh lib/indices.js once a day
@@ -345,6 +456,16 @@ class Handler(SimpleHTTPRequestHandler):
 
     def do_GET(self):
         route = self.path.split('?')[0]
+        if route == '/api/pakforecast':
+            payload, error = get_pak_grid()
+            body = json.dumps(payload if payload else {'error': error}, separators=(',', ':')).encode('utf-8')
+            self.send_response(200 if payload else 503)
+            self.send_header('Content-Type', 'application/json')
+            self.send_header('Content-Length', str(len(body)))
+            self.send_header('Cache-Control', 'no-cache')
+            self.end_headers()
+            self.wfile.write(body)
+            return
         if route == '/api/forecast':
             q = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
             try:
@@ -515,4 +636,5 @@ if __name__ == '__main__':
         print('Note: XAI_API_KEY is not set - the Grok assistant is unavailable until it is.', flush=True)
     threading.Thread(target=_refresh_wind_forever, daemon=True).start()
     threading.Thread(target=_refresh_climate_data_forever, daemon=True).start()
+    threading.Thread(target=_refresh_pak_grid_forever, daemon=True).start()
     ThreadingHTTPServer(('127.0.0.1', PORT), Handler).serve_forever()
