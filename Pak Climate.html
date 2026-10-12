@@ -187,6 +187,23 @@ body.modeTerrain #terrainNav{display:flex}
 .tCity{display:flex;align-items:center;gap:6px;cursor:pointer;padding:3px 9px 3px 6px;border-radius:999px;background:rgba(6,16,28,.85);border:1px solid var(--border-strong);color:var(--ink);font:600 10.5px Inter,Segoe UI,Arial,sans-serif;white-space:nowrap}
 .tCity:before{content:"";width:8px;height:8px;border-radius:50%;background:var(--accent)}
 .tCity:hover{border-color:var(--accent)}
+/* Terrain weather: animated city badges, "weather here" chip, lightning flash */
+.tCity.wx:before{display:none}
+.tCity .tt{color:var(--ink-dim);font-weight:500}
+.wxi{display:inline-block;width:16px;text-align:center;font-size:13px;position:relative}
+.wx-sun{animation:wxSpin 12s linear infinite}
+.wx-partly,.wx-cloud,.wx-fog{animation:wxDrift 3s ease-in-out infinite alternate}
+.wx-rain::after,.wx-storm::after{content:"";position:absolute;left:3px;right:3px;top:13px;height:7px;background:repeating-linear-gradient(105deg,transparent 0 2px,#7cc4fa 2px 3px);animation:wxFall .55s linear infinite}
+.wx-snow::after{content:"";position:absolute;left:1px;right:1px;top:13px;height:7px;background:radial-gradient(circle,#fff 0 1px,transparent 1.5px) 0 0/5px 5px;animation:wxFall 1.4s linear infinite}
+.wx-storm{animation:wxFlash 3.2s steps(1) infinite}
+@keyframes wxSpin{to{transform:rotate(360deg)}}
+@keyframes wxDrift{from{transform:translateX(-1.5px)}to{transform:translateX(1.5px)}}
+@keyframes wxFall{from{transform:translateY(-3px);opacity:1}to{transform:translateY(4px);opacity:0}}
+@keyframes wxFlash{0%,90%,100%{filter:none}93%{filter:brightness(2.4)}}
+#terrainNav .twx{font-size:10.5px;color:var(--ink);padding:5px 10px;border-radius:999px;border:1px solid var(--accent-line);background:var(--accent-soft);white-space:nowrap}
+#tFlash{position:absolute;inset:0;z-index:601;pointer-events:none;background:#e8f0ff;opacity:0;transition:opacity .09s;display:none}
+body.modeTerrain #tFlash{display:block}
+@media(prefers-reduced-motion:reduce){.wxi{animation:none!important}.wxi::after{animation:none!important}}
 #terrain3d .mapboxgl-ctrl-bottom-left{bottom:190px;left:286px}
 @media(max-width:1100px){#terrain3d .mapboxgl-ctrl-bottom-left{left:252px}}
 @media(max-width:1300px){.pill-info{display:none}}
@@ -296,6 +313,7 @@ body.aiOpen #aiFab{display:none}
 <div id="map"></div>
 <div id="globe3d"></div>
 <div id="terrain3d"></div>
+<div id="tFlash"></div>
 <div id="terrainNav" aria-label="Fly to"><b>Fly to</b></div>
 <div id="label3dWrap"></div>
 
@@ -1027,6 +1045,8 @@ function initTerrain(){
   tmap.addSource('dem',{type:'raster-dem',url:'mapbox://mapbox.mapbox-terrain-dem-v1',tileSize:512,maxzoom:14});
   tmap.setTerrain({source:'dem',exaggeration:1.7});
   tmap.setFog({range:[1,12],color:'rgba(150,200,255,0.45)','high-color':'#2a5fd6','horizon-blend':0.08,'space-color':'#030a12','star-intensity':0.55});
+  tmap.addLayer({id:'sky',type:'sky',paint:{'sky-type':'atmosphere','sky-atmosphere-sun':[180,45],'sky-atmosphere-sun-intensity':15}});
+  twStart();
   const pakData=HAS_PAK_BOUNDARY?PAK_BOUNDARY:(typeof COUNTRIES!=='undefined'?{type:'FeatureCollection',features:COUNTRIES.features.filter(f=>f.properties.i==='PAK')}:null);
   if(pakData){
    tmap.addSource('pak',{type:'geojson',data:pakData});
@@ -1036,14 +1056,89 @@ function initTerrain(){
   }
  });
  FC_CITIES.forEach(c=>{
-  const el=document.createElement('div');el.className='tCity';el.textContent=c.n;el.title='Open the 7-day forecast for '+c.n;
+  const el=document.createElement('div');el.className='tCity';el.title='Open the 7-day forecast for '+c.n;
+  el.innerHTML='<span class="wxi"></span><span>'+c.n+'</span><span class="tt"></span>';
   el.addEventListener('click',e=>{e.stopPropagation();openForecast(c.n);});
   new mapboxgl.Marker({element:el,anchor:'left'}).setLngLat(c.ll).addTo(tmap);
+  tw.cityEls[c.n]=el;
  });
  // Slow orbit until the user takes over (drag, scroll, touch); the ⟳ chip resumes it.
  const stop=()=>{tSpin=false;spinBtn.classList.remove('on');};
  ['mousedown','touchstart','wheel'].forEach(ev=>tmap.getCanvasContainer().addEventListener(ev,stop,{passive:true}));
  (function orbit(){requestAnimationFrame(orbit);if(terrainOn&&tSpin&&!tmap.isMoving())tmap.setBearing(tmap.getBearing()+0.05);})();
+}
+// ---- Live weather in the 3D terrain: rain/snow, sun and sky follow the forecast where the camera looks ----
+var tw={key:null,data:null,at:0,cityEls:{},ticker:null,flash:null,busy:false}; // var: used by initTerrain via twStart
+function wxKind(code){
+ if(code>=95)return 'storm';
+ if((code>=71&&code<=77)||code===85||code===86)return 'snow';
+ if(code>=51)return 'rain';
+ if(code===45||code===48)return 'fog';
+ if(code===3)return 'cloud';
+ return code===2?'partly':'sun';
+}
+function sunPosition(date,lat,lon){ // returns {alt, az} in degrees; az clockwise from north
+ const rad=Math.PI/180,J=date.valueOf()/864e5+2440587.5-2451545,M=(357.5291+0.98560028*J)*rad;
+ const L=M+(1.9148*Math.sin(M)+0.02*Math.sin(2*M)+0.0003*Math.sin(3*M))*rad+102.9372*rad+Math.PI,e=23.4397*rad;
+ const dec=Math.asin(Math.sin(L)*Math.sin(e)),ra=Math.atan2(Math.sin(L)*Math.cos(e),Math.cos(L));
+ const H=(280.16+360.9856235*J)*rad+lon*rad-ra,phi=lat*rad;
+ const alt=Math.asin(Math.sin(phi)*Math.sin(dec)+Math.cos(phi)*Math.cos(dec)*Math.cos(H));
+ const az=Math.atan2(Math.sin(H),Math.cos(H)*Math.sin(phi)-Math.tan(dec)*Math.cos(phi));
+ return {alt:alt/rad,az:(az/rad+180)%360};
+}
+const mixRGB=(a,b,t)=>a.map((x,i)=>Math.round(x+(b[i]-x)*t));
+const rgba=(c,a)=>'rgba('+c.join(',')+','+a+')';
+function twApply(){
+ if(!tmap||!tw.data)return;
+ const cur=tw.data.current,code=cur.weather_code,k=wxKind(code),mm=cur.precipitation||0,cloud=(cur.cloud_cover||0)/100;
+ const c=tmap.getCenter(),sp=sunPosition(new Date(),c.lat,c.lng),day=Math.max(0,Math.min(1,(sp.alt+6)/12)); // 0 night .. 1 day
+ const grey=Math.min(1,cloud*(k==='sun'||k==='partly'?.5:1)+(k==='rain'||k==='storm'||k==='snow'||k==='fog'?.35:0));
+ // falling rain / snow
+ if(k==='rain'||k==='storm')tmap.setRain({density:k==='storm'?.9:Math.min(.85,.4+mm/4),intensity:Math.min(1,.45+mm/4),color:'#a8adbc',opacity:.75,vignette:.7,'vignette-color':'#3f4652',direction:[0,80],'droplet-size':[2.6,18.2],'distortion-strength':.6,'center-thinning':0});
+ else tmap.setRain(null);
+ if(k==='snow')tmap.setSnow({density:Math.min(.95,.55+mm/3),intensity:1,'center-thinning':.1,direction:[0,50],opacity:1,color:'#ffffff','flake-size':.71,vignette:.3,'vignette-color':'#ffffff'});
+ else tmap.setSnow(null);
+ // sky colour: clear blue -> overcast grey, darkening toward night
+ const dayFog=mixRGB([150,200,255],[150,158,170],grey),dayHigh=mixRGB([42,95,214],[92,100,112],grey);
+ tmap.setFog({range:[1,12],color:rgba(mixRGB([18,26,44],dayFog,day),.45+.2*grey),'high-color':rgba(mixRGB([8,12,28],dayHigh,day),1),
+  'horizon-blend':.08+.1*grey,'space-color':'#030a12','star-intensity':.8*(1-day)});
+ if(tmap.getLayer('sky')){
+  tmap.setPaintProperty('sky','sky-atmosphere-sun',[sp.az,Math.max(0,Math.min(180,90-sp.alt))]);
+  tmap.setPaintProperty('sky','sky-atmosphere-sun-intensity',2+13*day*(1-.7*grey));
+ }
+ if(tmap.getLayer('satellite')){ // dim the land at night and under heavy cloud
+  tmap.setPaintProperty('satellite','raster-brightness-max',.3+.7*day*(1-.3*grey));
+  tmap.setPaintProperty('satellite','raster-saturation',-.35*grey);
+ }
+ // lightning for thunderstorms
+ clearInterval(tw.flash);tw.flash=null;
+ if(k==='storm')tw.flash=setInterval(()=>{if(!terrainOn||Math.random()<.5)return;const f=document.getElementById('tFlash');f.style.opacity=.55;setTimeout(()=>f.style.opacity=0,90);setTimeout(()=>{f.style.opacity=.35;setTimeout(()=>f.style.opacity=0,70);},180);},2500);
+ // "weather here" chip
+ const [ic,ds]=wmo(code,cur.is_day),near=FC_CITIES.map(x=>({x,d:Math.hypot(x.ll[0]-c.lng,x.ll[1]-c.lat)})).sort((a,b)=>a.d-b.d)[0];
+ document.getElementById('tWx').textContent=ic+' '+(near.d<.15?near.x.n:near.d<.8?'near '+near.x.n:c.lat.toFixed(1)+'°N '+c.lng.toFixed(1)+'°E')+' now: '+ds+' · '+Math.round(cur.temperature_2m)+'°C'+
+  (mm>0?' · '+mm+' mm/h':'')+' · cloud '+Math.round(cloud*100)+'%'+(day<.3?' · night':'');
+}
+async function twUpdate(force){
+ if(!terrainOn||!tmap||tw.busy)return;
+ const c=tmap.getCenter(),lat=Math.round(c.lat*4)/4,lon=Math.round(c.lng*4)/4,key=lat+','+lon; // re-check when the view moves ~25 km
+ if(!force&&key===tw.key&&Date.now()-tw.at<10*60000){twApply();return;}
+ tw.busy=true;
+ try{const r=await fetch('/api/forecast?lat='+lat+'&lon='+lon);if(r.ok){tw.data=await r.json();tw.key=key;tw.at=Date.now();twApply();}}
+ catch(e){}finally{tw.busy=false;}
+}
+async function twCities(){ // animated badges: today's forecast for each city
+ try{
+  const js=pk.data||await (await fetch('/api/pakforecast')).json();if(!js.cities)return;
+  FC_CITIES.forEach(c=>{const d=js.cities[c.n],el=tw.cityEls[c.n];if(!d||!el)return;
+   const code=d.weather_code[0],k=wxKind(code),[ic,ds]=wmo(code);
+   el.classList.add('wx');el.querySelector('.wxi').className='wxi wx-'+k;el.querySelector('.wxi').textContent=ic;
+   el.querySelector('.tt').textContent=Math.round(d.temperature_2m_max[0])+'°'+(d.precipitation_sum[0]>=.1?' · '+d.precipitation_sum[0].toFixed(1)+' mm':'');
+   el.title=c.n+' today: '+ds+', high '+Math.round(d.temperature_2m_max[0])+'°C, low '+Math.round(d.temperature_2m_min[0])+'°C - click for the full forecast';});
+ }catch(e){}
+}
+function twStart(){
+ twCities();twUpdate(true);
+ clearInterval(tw.ticker);tw.ticker=setInterval(()=>twUpdate(false),2000); // follows fly-to and panning
 }
 const tNav=document.getElementById('terrainNav');
 PLACES.forEach(pl=>{const b=document.createElement('button');b.type='button';b.textContent=pl.n;
@@ -1052,6 +1147,8 @@ PLACES.forEach(pl=>{const b=document.createElement('button');b.type='button';b.t
 const spinBtn=document.createElement('button');spinBtn.type='button';spinBtn.className='spin on';spinBtn.textContent='⟳ Auto-rotate';
 spinBtn.onclick=()=>{tSpin=!tSpin;spinBtn.classList.toggle('on',tSpin);};
 tNav.appendChild(spinBtn);
+const twChip=document.createElement('span');twChip.className='twx';twChip.id='tWx';twChip.textContent='⏳ loading weather…';
+tNav.appendChild(twChip);
 function setTerrain(v){
  if(v&&mode3d)setMode3d(false);
  terrainOn=v;
