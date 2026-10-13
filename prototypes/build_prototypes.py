@@ -1,15 +1,16 @@
-"""Build the three UI prototypes from the original portal page.
+"""Build UI prototypes A and B from the classic portal design.
 
     python prototypes/build_prototypes.py
 
-The original "Pak Climate.html" is only read, never changed. Each prototype is the same page (same data, buttons,
+The Immersive Map design (formerly prototype C) is now the main portal, "Pak Climate.html". The previous design is kept as
+"Pak Climate - Classic.html" and is the base for A and B (it is only read, never changed). Each prototype is that page (same data, buttons,
 AI, forecasts, 3D) with its own style sheet from this folder, plus a few small text swaps listed below. Re-run this
-after changing the original so the prototypes pick up the change.
+after changing the classic page so the prototypes pick up the change.
 """
 import os
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SRC = os.path.join(ROOT, 'Pak Climate.html')
+SRC = os.path.join(ROOT, 'Pak Climate - Classic.html')
 
 PROTOTYPES = {
     'A': {'file': 'Prototype A - Command Center.html', 'name': 'Command Center',
@@ -21,9 +22,6 @@ PROTOTYPES = {
                     ("ctx.strokeStyle='rgba(255,255,255,.85)'", "ctx.strokeStyle='rgba(15,23,42,.65)'"),  # wind lines visible on light map
                     ("{color:'#94a3b8',weight:.7,opacity:.4,fill:false,className:'cty'}", "{color:'#64748b',weight:.7,opacity:.5,fill:false,className:'cty'}"),
                     ("winter:'#cbd5e1'", "winter:'#64748b'")]},  # Winter trend line readable on white
-    'C': {'file': 'Prototype C - Immersive Map.html', 'name': 'Immersive Map',
-          'head': ['<link rel="stylesheet" href="prototypes/protoC.css">', '<script src="prototypes/protoC.js"></script>'],
-          'after_chartjs': [], 'swaps': []},
 }
 
 

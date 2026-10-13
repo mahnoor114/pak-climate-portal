@@ -30,14 +30,21 @@
 <body>
 <header>
  <h1>UI prototypes</h1>
- <p>Three new designs for the Pakistan Climate portal, next to the original. Every prototype is fully working, with the same data, AI assistant, forecasts, air quality, districts and 3D views; only the look and layout differ. Open each one and compare.</p>
+ <p>The portal now uses the <b>Immersive Map</b> design. The previous Classic design and the other two prototypes are kept here for comparison. Every page is fully working, with the same data, AI assistant, forecasts, air quality, districts and 3D views; only the look and layout differ.</p>
 </header>
 <main>
  <a class="card" href="Pak%20Climate.html">
-  <img src="prototypes/shot_original.jpg" alt="Original portal">
-  <div class="body"><span class="tag orig">Original · unchanged</span><h2>Current portal</h2>
-   <p>The portal as it is today: floating dark glass panels on both sides, driver tabs along the bottom.</p>
-   <span class="open">Open original →</span></div>
+  <img src="prototypes/shot_original.jpg" alt="Current portal, Immersive Map design">
+  <div class="body"><span class="tag">Current portal · chosen design</span><h2>Immersive Map</h2>
+   <p>The main portal now uses this design (it was prototype C). The map takes the whole screen, with Pakistan-green accents.</p>
+   <ul><li>Floating pill-shaped top bar and driver chips</li><li>Side panels slide in as drawers: <b>INDICES</b> tab on the left, <b>INSIGHTS</b> on the right</li></ul>
+   <span class="open">Open the portal →</span></div>
+ </a>
+ <a class="card" href="Pak%20Climate%20-%20Classic.html">
+  <img src="prototypes/shot_classic.jpg" alt="Classic design">
+  <div class="body"><span class="tag orig">Previous design · kept</span><h2>Classic</h2>
+   <p>The portal's earlier look: floating dark glass panels on both sides, driver tabs along the bottom. Kept so it can be brought back at any time.</p>
+   <span class="open">Open Classic →</span></div>
  </a>
  <a class="card" href="Prototype%20A%20-%20Command%20Center.html">
   <img src="prototypes/shot_A.jpg" alt="Prototype A, Command Center">
@@ -53,16 +60,9 @@
    <ul><li>White cards with soft shadows and a light map</li><li>Dark text and darker chart lines for easy reading</li><li>Good for presentations, projectors and printing</li></ul>
    <span class="open">Open Prototype B →</span></div>
  </a>
- <a class="card" href="Prototype%20C%20-%20Immersive%20Map.html">
-  <img src="prototypes/shot_C.jpg" alt="Prototype C, Immersive Map">
-  <div class="body"><span class="tag">Prototype C</span><h2>Immersive Map</h2>
-   <p>The map takes the whole screen, with Pakistan-green accents.</p>
-   <ul><li>Floating pill-shaped top bar and driver chips</li><li>Side panels slide in as drawers: <b>INDICES</b> tab on the left, <b>INSIGHTS</b> on the right</li><li>Best for exploring the map, wind and 3D views</li></ul>
-   <span class="open">Open Prototype C →</span></div>
- </a>
 </main>
 <footer>
- The prototypes are generated from the original page, so they stay in step with it. After changing the original, rebuild them with <code>python prototypes/build_prototypes.py</code>. Each design lives in its own style sheet in the <code>prototypes</code> folder.
+ Prototypes A and B are generated from the Classic page; rebuild them with <code>python prototypes/build_prototypes.py</code> after changing it. Each design lives in its own style sheet in the <code>prototypes</code> folder.
 </footer>
 </body>
 </html>
