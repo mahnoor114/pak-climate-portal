@@ -1276,8 +1276,59 @@ async function twCities(){ // animated badges: today's forecast for each city
    el.title=c.n+' today: '+ds+', high '+Math.round(d.temperature_2m_max[0])+'°C, low '+Math.round(d.temperature_2m_min[0])+'°C - click for the full forecast';});
  }catch(e){}
 }
+// ---- Driver tabs inside the 3D terrain view: NASA layers draped over the mountains; wind tabs as animated wind ----
+const TWIND={lon0:52,lon1:88,lat0:18,lat1:42,w:1400,h:1100}; // wind box over Pakistan and its neighbours
+let tLayerKey=null,tWindAnim=null;
+function terrainLayerClear(){
+ if(!tmap)return;
+ ['drv-live','drv-wind'].forEach(id=>{if(tmap.getLayer(id))tmap.removeLayer(id);if(tmap.getSource(id))tmap.removeSource(id);});
+ cancelAnimationFrame(tWindAnim);tWindAnim=null;
+}
+function terrainLayer(key){
+ if(!tmap||!tmap.isStyleLoaded()){setTimeout(()=>terrainOn&&terrainLayer(key),500);return;}
+ terrainLayerClear();tLayerKey=key;
+ const s=sources[key];if(!s)return;
+ const firstLabel=(tmap.getStyle().layers.find(l=>l.type==='symbol')||{}).id; // keep place names on top
+ if(s.gibs){
+  const [id,ext,lvl]=s.gibs;
+  tmap.addSource('drv-live',{type:'raster',tileSize:256,maxzoom:lvl,attribution:'NASA GIBS',
+   tiles:['https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/'+id+'/default/GoogleMapsCompatible_Level'+lvl+'/{z}/{y}/{x}.'+ext]});
+  tmap.addLayer({id:'drv-live',type:'raster',source:'drv-live',paint:{'raster-opacity':.6,'raster-fade-duration':200}},firstLabel);
+  toast('Terrain: showing '+s.label);
+ }else if(s.wind){
+  fetchWind().then(()=>{if(tLayerKey!==key||!terrainOn)return;terrainWind(s.wind,firstLabel);toast('Terrain: showing '+s.label);})
+   .catch(()=>toast('Wind data unavailable right now'));
+ }
+}
+function terrainWind(level,beforeId){
+ const B=TWIND,cv=document.createElement('canvas');cv.width=B.w;cv.height=B.h;const cx=cv.getContext('2d');
+ const my=lat=>Math.log(Math.tan(Math.PI/4+lat*Math.PI/360)),yN=my(B.lat1),yS=my(B.lat0); // canvas rows follow the map's projection
+ const X=lon=>(lon-B.lon0)/(B.lon1-B.lon0)*B.w,Y=lat=>(yN-my(lat))/(yN-yS)*B.h;
+ // speed colours once, particles every frame
+ const field=document.createElement('canvas');field.width=B.w/5;field.height=B.h/5;const fc=field.getContext('2d'),img=fc.createImageData(field.width,field.height);
+ for(let j=0;j<field.height;j++){const lat=Math.atan(Math.sinh(yN-(j+.5)/field.height*(yN-yS)))*180/Math.PI;
+  for(let i=0;i<field.width;i++){const w=windAt(lat,B.lon0+(i+.5)/field.width*(B.lon1-B.lon0),level);if(!w)continue;
+   const c=windColor(Math.hypot(w[0],w[1]),level),o=(j*field.width+i)*4;img.data[o]=c[0];img.data[o+1]=c[1];img.data[o+2]=c[2];img.data[o+3]=110;}}
+ fc.putImageData(img,0,0);
+ const trails=document.createElement('canvas');trails.width=B.w;trails.height=B.h;const tc=trails.getContext('2d');
+ const spawn=q=>{q.lon=B.lon0+Math.random()*(B.lon1-B.lon0);q.lat=B.lat0+Math.random()*(B.lat1-B.lat0);q.age=Math.random()*80|0;return q;};
+ const parts=[...Array(2600)].map(()=>spawn({})),k=level===250?.012:.02;
+ tmap.addSource('drv-wind',{type:'canvas',canvas:cv,animate:true,coordinates:[[B.lon0,B.lat1],[B.lon1,B.lat1],[B.lon1,B.lat0],[B.lon0,B.lat0]]});
+ tmap.addLayer({id:'drv-wind',type:'raster',source:'drv-wind',paint:{'raster-opacity':.9,'raster-fade-duration':0}},beforeId);
+ (function frame(){
+  tWindAnim=requestAnimationFrame(frame);if(!terrainOn)return;
+  tc.globalCompositeOperation='destination-in';tc.fillStyle='rgba(0,0,0,.92)';tc.fillRect(0,0,B.w,B.h);
+  tc.globalCompositeOperation='source-over';tc.strokeStyle='rgba(255,255,255,.9)';tc.lineWidth=1.4;tc.beginPath();
+  parts.forEach(q=>{const w=windAt(q.lat,q.lon,level);if(!w||++q.age>90){spawn(q);q.age=0;return;}
+   const lon=q.lon+w[0]*k/Math.cos(q.lat*Math.PI/180),lat=q.lat+w[1]*k;
+   if(lon<B.lon0||lon>B.lon1||lat<B.lat0||lat>B.lat1){spawn(q);return;}
+   tc.moveTo(X(q.lon),Y(q.lat));tc.lineTo(X(lon),Y(lat));q.lon=lon;q.lat=lat;});
+  tc.stroke();
+  cx.clearRect(0,0,B.w,B.h);cx.imageSmoothingEnabled=true;cx.drawImage(field,0,0,B.w,B.h);cx.drawImage(trails,0,0);
+ })();
+}
 function twStart(){
- twCities();twUpdate(true);
+ terrainLayer(active); // the selected tab's layer appears on the terrain too twCities();twUpdate(true);
  clearInterval(tw.ticker);tw.ticker=setInterval(()=>twUpdate(false),2000); // follows fly-to and panning
 }
 const tNav=document.getElementById('terrainNav');
@@ -1297,7 +1348,7 @@ function setTerrain(v){
  terrainBtn.textContent=v?'🗺 2D':'⛰ Terrain';
  document.querySelector('.maplabel').textContent=v?'3D TERRAIN • Drag to pan • Right-drag or Ctrl+drag to tilt & rotate • Click a city for its forecast • Imagery & elevation: Mapbox':'LIVE ANALYTICAL MAP • Switch driver layers with the cards below';
  if(v){
-  ensureMapboxGL().then(()=>{if(!tmap)initTerrain();else tmap.resize();})
+  ensureMapboxGL().then(()=>{if(!tmap)initTerrain();else{tmap.resize();if(tLayerKey!==active)terrainLayer(active);}})
    .catch(e=>{toast('3D terrain unavailable: '+e.message);setTerrain(false);});
  }else{map.invalidateSize();resetWind();}
 }
@@ -1770,6 +1821,7 @@ document.querySelectorAll('.layer').forEach(btn=>{
    active=key; layers[active].addTo(map);
    applyLive(key);
    if(mode3d){buildDriver3(key);buildLive3(key);}
+   if(terrainOn)terrainLayer(key);
    document.querySelectorAll('.layer').forEach(x=>x.classList.remove('active'));
    btn.classList.add('active');
    document.getElementById('activeTitle').textContent='Active layer: '+btn.querySelector('.layername').textContent;
