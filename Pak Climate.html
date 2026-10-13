@@ -652,6 +652,9 @@ const sources={
  nao:{gibs:['MODIS_Terra_CorrectedReflectance_TrueColor','jpeg',9],label:'MODIS Terra true color',url:NS+'current/wind/surface/level/orthographic=-30,50,350'},
  snow:{gibs:['MODIS_Terra_L3_NDSI_Snow_Cover_Daily','png',8],label:'MODIS Terra NDSI snow cover',url:NS+'current/wind/surface/level/orthographic=70,50,350'}
 };
+// Daily satellite photos (true colour, snow) are still being imaged for the parts of the world where it is not yet
+// daytime, which leaves black areas. For those layers use yesterday's complete day.
+function gibsDay(id){if(!/CorrectedReflectance|Snow_Cover_Daily/.test(id))return '';const d=new Date(Date.now()-864e5);return d.toISOString().slice(0,10)+'/';}
 let liveLayer=null;
 function applyLive(key){
  if(liveLayer){map.removeLayer(liveLayer);liveLayer=null;}
@@ -664,14 +667,14 @@ function applyLive(key){
  }
  stopWind();
  const [id,ext,lvl]=s.gibs;
- liveLayer=L.tileLayer('https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/'+id+'/default/GoogleMapsCompatible_Level'+lvl+'/{z}/{y}/{x}.'+ext,
+ liveLayer=L.tileLayer('https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/'+id+'/default/'+gibsDay(id)+'GoogleMapsCompatible_Level'+lvl+'/{z}/{y}/{x}.'+ext,
   {maxZoom:lvl,opacity:.65,attribution:'Live data: <a href="https://gibs.earthdata.nasa.gov" target="_blank" rel="noopener">NASA GIBS</a>'});
   // NASA GIBS occasionally answers with a temporary 500: retry a failed tile up to twice.
   liveLayer.on('tileerror',e=>{const t=e.tile,n=+(t.dataset.retry||0);
    if(n<2){t.dataset.retry=n+1;setTimeout(()=>{t.src=t.src.split('?')[0]+'?retry='+(n+1);},800*(n+1));}});
   liveLayer.addTo(map);
   liveLayer.setZIndex(1);
- document.getElementById('liveSrc').textContent='LIVE TILES: NASA GIBS — '+s.label;
+ document.getElementById('liveSrc').textContent='LIVE TILES: NASA GIBS — '+s.label+(gibsDay(id)?' (yesterday, complete coverage)':'');
 }
 
 // Animated upper-level wind layer (GFS via Open-Meteo, the same model earth.nullschool draws)
@@ -889,7 +892,7 @@ function loadTileRect(urlFn,z,x0,x1,y0,y1){
 }
 function loadWorldTiles(id,ext,z,lvl){
  const n=Math.pow(2,z)-1;
- return loadTileRect((z,x,y)=>'https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/'+id+'/default/GoogleMapsCompatible_Level'+lvl+'/'+z+'/'+y+'/'+x+'.'+ext,z,0,n,0,n);
+ return loadTileRect((z,x,y)=>'https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/'+id+'/default/'+gibsDay(id)+'GoogleMapsCompatible_Level'+lvl+'/'+z+'/'+y+'/'+x+'.'+ext,z,0,n,0,n);
 }
 const ESRI_SAT=(z,x,y)=>'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/'+z+'/'+y+'/'+x;
 // Reprojects a Mercator tile canvas (from loadTileRect) to an equirectangular lon/lat window.
@@ -1292,7 +1295,7 @@ function terrainLayer(key){
  if(s.gibs){
   const [id,ext,lvl]=s.gibs;
   tmap.addSource('drv-live',{type:'raster',tileSize:256,maxzoom:lvl,attribution:'NASA GIBS',
-   tiles:['https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/'+id+'/default/GoogleMapsCompatible_Level'+lvl+'/{z}/{y}/{x}.'+ext]});
+   tiles:['https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/'+id+'/default/'+gibsDay(id)+'GoogleMapsCompatible_Level'+lvl+'/{z}/{y}/{x}.'+ext]});
   tmap.addLayer({id:'drv-live',type:'raster',source:'drv-live',paint:{'raster-opacity':.6,'raster-fade-duration':200}},firstLabel);
   toast('Terrain: showing '+s.label);
  }else if(s.wind){
