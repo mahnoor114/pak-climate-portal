@@ -248,6 +248,9 @@ def _refresh_wind_forever():
     global _wind_status
     while True:
         cached, age = _read_cache()
+        if cached is None or age >= WIND_MAX_AGE:
+            _db_restore('wind', WIND_CACHE)
+            cached, age = _read_cache()
         if cached is None or age >= WIND_MAX_AGE or cached.get('region', {}).get('grid') != WG_REGION:
             try:
                 fresh = _fetch_wind()
@@ -274,6 +277,77 @@ def _refresh_wind_forever():
         time.sleep(300)
 
 
+# ---- Single-point requests (city/spot forecast, spot air quality): never ask the API twice for the same thing ----
+# Order: memory cache -> database copy (e.g. after a restart) -> ONE API call shared by all simultaneous requests
+# for the same point -> last stale copy if the API fails.
+_inflight = {}
+_inflight_lock = threading.Lock()
+
+
+def cached_point(kind, store, lock, key, max_age, fetch, label):
+    with lock:
+        hit = store.get(key)
+    if hit and time.time() - hit[0] < max_age:
+        return hit[1], None
+    got = portal_db.latest_payload(kind, *key, max_age=max_age)
+    if got:
+        payload, age = got
+        with lock:
+            store[key] = (time.time() - age, payload)
+        return payload, None
+    with _inflight_lock:
+        ev = _inflight.get((kind, key))
+        leader = ev is None
+        if leader:
+            ev = _inflight[(kind, key)] = threading.Event()
+    if not leader:  # someone is already fetching this point: wait for their answer instead of calling again
+        ev.wait(90)
+        with lock:
+            hit = store.get(key)
+        return (hit[1], None) if hit else (None, f'{label} service unavailable - try again shortly')
+    try:
+        payload = fetch()
+        payload['fetched'] = dt.datetime.now(dt.timezone.utc).strftime('%Y-%m-%d %H:%M UTC')
+        with lock:
+            store[key] = (time.time(), payload)
+        portal_db.enqueue(kind, payload, *key)
+        return payload, None
+    except (urllib.error.URLError, OSError, ValueError, http.client.HTTPException) as e:
+        if hit:
+            return dict(hit[1], stale=True), None
+        return None, f'{label} service unavailable ({e})'
+    finally:
+        with _inflight_lock:
+            _inflight.pop((kind, key), None)
+        ev.set()
+
+
+def _db_restore(kind, path):
+    """If the database holds a newer copy of a grid than the file on disk (files lost, fresh install), restore it
+    from there instead of downloading it again."""
+    try:
+        file_time = os.path.getmtime(path)
+    except OSError:
+        file_time = 0
+    got = portal_db.latest_payload(kind)
+    if not got:
+        return
+    payload, age = got
+    fetched_time = time.time() - age
+    if fetched_time > file_time + 60:
+        tmp = path + '.tmp'
+        with open(tmp, 'w', encoding='utf-8') as f:
+            json.dump(payload, f, separators=(',', ':'))
+        os.replace(tmp, path)
+        os.utime(path, (fetched_time, fetched_time))  # keep the true age, so the normal refresh schedule applies
+        print(f'Restored {kind} from the database (no API call)', flush=True)
+
+
+def _db_grid(kind, max_age):
+    """Grid straight from the database when its file is missing (served while the refresher works)."""
+    got = portal_db.latest_payload(kind)
+    return (dict(got[0], stale=got[1] >= max_age), None) if got else None
+
 # ---- City forecasts (Open-Meteo, free; credit "Weather data: Open-Meteo") ----
 # Fetched when a city is opened and cached for FORECAST_MAX_AGE, so repeat views cost no API calls.
 FORECAST_MAX_AGE = 30 * 60
@@ -289,23 +363,10 @@ _forecast_lock = threading.Lock()
 
 
 def get_forecast(lat, lon):
-    """Return (payload, error) for a point, from cache when fresh. Falls back to a stale copy if Open-Meteo fails."""
+    """Return (payload, error) for a point: memory, database, or one shared Open-Meteo call (see cached_point)."""
     key = (round(lat, 2), round(lon, 2))
-    with _forecast_lock:
-        hit = _forecasts.get(key)
-    if hit and time.time() - hit[0] < FORECAST_MAX_AGE:
-        return hit[1], None
-    try:
-        payload = open_meteo_json(FORECAST_URL.format(lat=key[0], lon=key[1]), 1)
-        payload['fetched'] = dt.datetime.now(dt.timezone.utc).strftime('%Y-%m-%d %H:%M UTC')
-        with _forecast_lock:
-            _forecasts[key] = (time.time(), payload)
-        portal_db.enqueue('point_forecast', payload, *key)
-        return payload, None
-    except (urllib.error.URLError, OSError, ValueError) as e:
-        if hit:
-            return dict(hit[1], stale=True), None
-        return None, f'Forecast service unavailable ({e})'
+    return cached_point('point_forecast', _forecasts, _forecast_lock, key, FORECAST_MAX_AGE,
+                        lambda: open_meteo_json(FORECAST_URL.format(lat=key[0], lon=key[1]), 1), 'Forecast')
 
 
 # ---- Whole-Pakistan daily forecast grid (Open-Meteo) ----
@@ -370,6 +431,12 @@ def _refresh_pak_grid_forever():
         except OSError:
             age = PAK_MAX_AGE
         if age >= PAK_MAX_AGE:
+            _db_restore('weather_grid', PAK_CACHE)
+            try:
+                age = time.time() - os.path.getmtime(PAK_CACHE)
+            except OSError:
+                pass
+        if age >= PAK_MAX_AGE:
             try:
                 fresh = _fetch_pak_grid()
                 tmp = PAK_CACHE + '.tmp'
@@ -396,7 +463,7 @@ def get_pak_grid():
             return payload, None
     except (OSError, ValueError):
         pass
-    return None, _pak_status
+    return _db_grid('weather_grid', PAK_MAX_AGE) or (None, _pak_status)
 
 
 # ---- Air quality: AQI, smog particles (PM2.5 / PM10), aerosol optical depth, dust (Open-Meteo / CAMS, free) ----
@@ -476,6 +543,12 @@ def _refresh_aq_forever():
         except OSError:
             age = AQ_MAX_AGE
         if age >= AQ_MAX_AGE:
+            _db_restore('air_quality_grid', AQ_CACHE)
+            try:
+                age = time.time() - os.path.getmtime(AQ_CACHE)
+            except OSError:
+                pass
+        if age >= AQ_MAX_AGE:
             try:
                 fresh = _fetch_aq_grid()
                 tmp = AQ_CACHE + '.tmp'
@@ -502,29 +575,15 @@ def get_aq_grid():
             return payload, None
     except (OSError, ValueError):
         pass
-    return None, _aq_status
+    return _db_grid('air_quality_grid', AQ_MAX_AGE) or (None, _aq_status)
 
 
 def get_aq_point(lat, lon):
-    """Current air quality + next 48 h for one point, cached for AQ_POINT_MAX_AGE (stale copy if the service fails)."""
+    """Current air quality + next 48 h for one point: memory, database, or one shared call (see cached_point)."""
     key = (round(lat, 2), round(lon, 2))
-    with _aq_lock:
-        hit = _aq_points.get(key)
-    if hit and time.time() - hit[0] < AQ_POINT_MAX_AGE:
-        return hit[1], None
-    try:
-        url = (f'{AQ_URL}?latitude={key[0]}&longitude={key[1]}&timezone=Asia%2FKarachi&forecast_days=3'
-               '&current=us_aqi,pm2_5,pm10,aerosol_optical_depth,dust,ozone,nitrogen_dioxide&hourly=us_aqi,pm2_5')
-        payload = open_meteo_json(url, 1)
-        payload['fetched'] = dt.datetime.now(dt.timezone.utc).strftime('%Y-%m-%d %H:%M UTC')
-        with _aq_lock:
-            _aq_points[key] = (time.time(), payload)
-        portal_db.enqueue('point_air', payload, *key)
-        return payload, None
-    except (urllib.error.URLError, OSError, ValueError) as e:
-        if hit:
-            return dict(hit[1], stale=True), None
-        return None, f'Air-quality service unavailable ({e})'
+    url = (f'{AQ_URL}?latitude={key[0]}&longitude={key[1]}&timezone=Asia%2FKarachi&forecast_days=3'
+           '&current=us_aqi,pm2_5,pm10,aerosol_optical_depth,dust,ozone,nitrogen_dioxide&hourly=us_aqi,pm2_5')
+    return cached_point('point_air', _aq_points, _aq_lock, key, AQ_POINT_MAX_AGE, lambda: open_meteo_json(url, 1), 'Air-quality')
 
 
 DATA_MAX_AGE = 24 * 3600  # refresh lib/indices.js once a day
@@ -556,7 +615,7 @@ def get_wind():
         cached, age = _read_cache()
     if cached:
         return dict(cached, stale=age >= WIND_MAX_AGE), None
-    return None, _wind_status
+    return _db_grid('wind', WIND_MAX_AGE) or (None, _wind_status)
 
 
 # The portal folder is on a network drive that can stall for seconds at a time. Static files are kept in

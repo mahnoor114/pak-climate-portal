@@ -80,11 +80,35 @@ def enabled():
     return bool(os.environ.get('PORTAL_DB_PASSWORD'))
 
 
-def connect():
+def connect(timeout=15):
     import psycopg2
     return psycopg2.connect(host=os.environ.get('PORTAL_DB_HOST', 'localhost'), port=int(os.environ.get('PORTAL_DB_PORT', '5432')),
                             user=os.environ.get('PORTAL_DB_USER', 'postgres'), password=os.environ['PORTAL_DB_PASSWORD'],
-                            dbname=os.environ.get('PORTAL_DB_NAME', 'landslide portal 2 '), connect_timeout=15)
+                            dbname=os.environ.get('PORTAL_DB_NAME', 'landslide portal 2 '), connect_timeout=timeout)
+
+
+def latest_payload(source, lat=None, lon=None, max_age=None):
+    """Newest stored API reply for a source (and point), as (payload, age_seconds), or None.
+    Used so the portal can answer from the database instead of calling the API again. Never raises: if the
+    database is off or unreachable it returns None quickly and the caller carries on as before."""
+    if not enabled():
+        return None
+    try:
+        con = connect(timeout=3)
+        try:
+            with con.cursor() as cur:
+                where = 'lat = %s and lon = %s' if lat is not None else 'lat is null'
+                cur.execute(f'select payload, extract(epoch from now() - fetched_at) from {SCHEMA}.api_responses '
+                            f'where source = %s and {where} order by fetched_at desc limit 1',
+                            (source, lat, lon) if lat is not None else (source,))
+                row = cur.fetchone()
+        finally:
+            con.close()
+    except Exception:
+        return None
+    if not row or (max_age is not None and row[1] > max_age):
+        return None
+    return row[0], float(row[1])
 
 
 def _ts(text):
