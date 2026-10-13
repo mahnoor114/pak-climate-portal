@@ -180,25 +180,28 @@ def open_meteo_json(url, points):
 # ---- Shared upper-level wind (jet stream / western disturbances) ----
 # Open-Meteo counts every grid point as one API call against a free limit of ~10,000/day per IP, so
 # browsers must not each fetch it. The global 7.5° grid below is 1,008 points; refreshing every 6 h
-# (the GFS update cycle) uses ~4,000 calls/day. The server keeps the last good copy on disk and backs
+# (plus the regional grid, every 8 h) uses ~4,000 calls/day. The server keeps the last good copy on disk and backs
 # off after a failure. The page reads the grid from the payload, so the two can't drift apart.
 WIND_CACHE = os.path.join(ROOT, 'lib', 'wind_cache.json')
-WIND_MAX_AGE = 6 * 3600
+WIND_MAX_AGE = 8 * 3600      # GFS updates every 6 h; 8 h keeps total Open-Meteo use well under the free daily limit
 WIND_RETRY_AFTER = 30 * 60   # wait this long after a failed fetch
 WG = dict(lat0=-75, lon0=-180, step=7.5, ny=21, nx=48)  # whole globe: 75°S-75°N, 180°W-172.5°E
-WIND_ROWS_PER_REQUEST = 3    # 144 points per request keeps the URL short
+# Finer grid along the western-disturbance path (Mediterranean -> Pakistan), used when the 3D globe focuses on
+# Pakistan: 2.5° (~275 km), 13 x 25 = 325 points, ~1,300 calls/day at the 6-hourly refresh.
+WG_REGION = dict(lat0=15, lon0=30, step=2.5, ny=13, nx=25)  # 15-45°N, 30-90°E
+WIND_ROWS_PER_REQUEST = 3    # keeps each URL short
 _wind_lock = threading.Lock()
 
 
-def _fetch_wind():
+def _fetch_wind_grid(g):
     d = {'250': {'u': [], 'v': []}, '500': {'u': [], 'v': []}}
     model_time = ''
-    for j0 in range(0, WG['ny'], WIND_ROWS_PER_REQUEST):
+    for j0 in range(0, g['ny'], WIND_ROWS_PER_REQUEST):
         la, lo = [], []
-        for j in range(j0, min(j0 + WIND_ROWS_PER_REQUEST, WG['ny'])):
-            for i in range(WG['nx']):
-                la.append(WG['lat0'] + j * WG['step'])
-                lo.append(WG['lon0'] + i * WG['step'])
+        for j in range(j0, min(j0 + WIND_ROWS_PER_REQUEST, g['ny'])):
+            for i in range(g['nx']):
+                la.append(g['lat0'] + j * g['step'])
+                lo.append(g['lon0'] + i * g['step'])
         url = ('https://api.open-meteo.com/v1/gfs?latitude=' + ','.join(map(str, la)) + '&longitude=' + ','.join(map(str, lo))
                + '&current=wind_speed_250hPa,wind_direction_250hPa,wind_speed_500hPa,wind_direction_500hPa&wind_speed_unit=ms')
         js = open_meteo_json(url, len(la))
@@ -213,15 +216,21 @@ def _fetch_wind():
                 a = math.radians(cur.get(f'wind_direction_{lv}hPa') or 0)
                 d[lv]['u'].append(round(-s * math.sin(a), 2))
                 d[lv]['v'].append(round(-s * math.cos(a), 2))
-    return {'fetched': dt.datetime.now(dt.timezone.utc).strftime('%Y-%m-%d %H:%M UTC'), 'model_time': model_time, 'grid': WG, 'd': d}
+    return d, model_time
 
+
+def _fetch_wind():
+    d, model_time = _fetch_wind_grid(WG)
+    region, _ = _fetch_wind_grid(WG_REGION)
+    return {'fetched': dt.datetime.now(dt.timezone.utc).strftime('%Y-%m-%d %H:%M UTC'), 'model_time': model_time,
+            'grid': WG, 'd': d, 'region': {'grid': WG_REGION, 'd': region}}
 
 def _read_cache():
     """Return (payload, age_seconds) for a cache matching the current grid, else (None, None)."""
     try:
         with open(WIND_CACHE, encoding='utf-8') as f:
             cached = json.load(f)
-        if cached.get('grid') == WG:
+        if cached.get('grid') == WG:  # a copy without the regional grid still serves; the refresher adds it
             return cached, time.time() - os.path.getmtime(WIND_CACHE)
     except (OSError, ValueError):
         pass
@@ -236,7 +245,7 @@ def _refresh_wind_forever():
     global _wind_status
     while True:
         cached, age = _read_cache()
-        if cached is None or age >= WIND_MAX_AGE:
+        if cached is None or age >= WIND_MAX_AGE or cached.get('region', {}).get('grid') != WG_REGION:
             try:
                 fresh = _fetch_wind()
                 with _wind_lock:
@@ -296,7 +305,7 @@ def get_forecast(lat, lon):
 
 # ---- Whole-Pakistan daily forecast grid (Open-Meteo) ----
 # 0.75° grid (~80 km) covering Pakistan's official boundary (incl. Jammu & Kashmir): 20 x 26 = 520 points, 7 days.
-# Refreshed in the background every 6 h (~2,100 calls/day); the page draws it as a smooth colour map clipped to the boundary.
+# Refreshed in the background every 8 h (~1,600 calls/day); the page draws it as a smooth colour map clipped to the boundary.
 PAK_GRID = dict(lat0=23.5, lon0=60.75, step=0.75, ny=20, nx=26)   # 23.5-37.75°N, 60.75-79.5°E
 PAK_CACHE = os.path.join(ROOT, 'lib', 'pak_forecast_cache.json')
 PAK_CITIES = {  # name: (lat, lon) - same as FC_CITIES in Pak Climate.html
@@ -304,7 +313,7 @@ PAK_CITIES = {  # name: (lat, lon) - same as FC_CITIES in Pak Climate.html
     'Quetta': (30.18, 66.99), 'Multan': (30.20, 71.47), 'Faisalabad': (31.42, 73.08), 'Hyderabad': (25.40, 68.37),
     'Sukkur': (27.70, 68.86), 'Gwadar': (25.13, 62.32), 'Muzaffarabad': (34.37, 73.47), 'Gilgit': (35.92, 74.31),
     'Skardu': (35.30, 75.63), 'Chitral': (35.85, 71.79)}
-PAK_MAX_AGE = 6 * 3600
+PAK_MAX_AGE = 8 * 3600
 PAK_VARS = ['weather_code', 'temperature_2m_max', 'temperature_2m_min', 'precipitation_sum',
             'precipitation_probability_max', 'wind_speed_10m_max']
 _pak_status = 'The Pakistan forecast map is being prepared (about 1 minute after the server starts)'

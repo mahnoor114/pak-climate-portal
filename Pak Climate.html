@@ -181,6 +181,11 @@ body.modeTerrain #terrain3d{display:block}
 body.modeTerrain #map{display:none}
 #terrainNav{position:absolute;z-index:700;left:50%;top:118px;transform:translateX(-50%);display:none;flex-wrap:wrap;justify-content:center;align-items:center;gap:6px;max-width:calc(100vw - 660px);padding:6px 10px;border-radius:16px;background:var(--surface);border:1px solid var(--border);backdrop-filter:blur(12px)}
 body.modeTerrain #terrainNav{display:flex}
+#globeNav{position:absolute;z-index:700;left:50%;top:118px;transform:translateX(-50%);display:none;gap:6px;padding:6px 10px;border-radius:16px;background:var(--surface);border:1px solid var(--border);backdrop-filter:blur(12px)}
+body.mode3d #globeNav{display:flex}
+#globeNav button{font:inherit;font-size:10.5px;color:var(--ink);cursor:pointer;padding:5px 10px;border-radius:999px;border:1px solid var(--border-strong);background:var(--surface-2)}
+#globeNav button:hover{border-color:var(--accent-line);background:var(--surface-3)}
+#globeNav button.on{border-color:var(--accent);background:var(--accent-soft);color:#fff}
 #terrainNav b{font-size:9.5px;letter-spacing:1px;text-transform:uppercase;color:var(--ink-dim);margin-right:2px}
 #terrainNav button{font:inherit;font-size:10.5px;color:var(--ink);cursor:pointer;padding:5px 10px;border-radius:999px;border:1px solid var(--border-strong);background:var(--surface-2)}
 #terrainNav button:hover{border-color:var(--accent-line);background:var(--surface-3)}
@@ -330,6 +335,7 @@ body.aiOpen #aiFab{display:none}
 <div id="terrain3d"></div>
 <div id="tFlash"></div>
 <div id="terrainNav" aria-label="Fly to"><b>Fly to</b></div>
+<div id="globeNav" aria-label="Globe view"><button type="button" onclick="globeFocusPakistan()">🎯 Focus Pakistan</button><button type="button" onclick="globeSpin()">⟳ Rotate</button><button type="button" onclick="globeWhole()">🌍 Whole globe</button></div>
 <div id="label3dWrap"></div>
 
 <div class="topbar">
@@ -625,7 +631,7 @@ function applyLive(key){
 // Animated upper-level wind layer (GFS via Open-Meteo, the same model earth.nullschool draws)
 // Global 7.5° grid (75°S-75°N, all longitudes). The server sends its grid with the data and fetchWind adopts it.
 let WG={lat0:-75,lon0:-180,step:7.5,ny:21,nx:48};
-let windData=null,windReq=null;
+let windData=null,windReq=null,windRegion=null; // windRegion: finer grid over the western-disturbance corridor, if the server has it
 const wind={level:null,parts:[],raf:0,w:0,h:0};
 const windField=document.createElement('canvas'),windCv=document.createElement('canvas');
 windField.className=windCv.className='windcv';
@@ -647,7 +653,7 @@ function fetchWind(){
   },()=>null).then(js=>{
    if(!js){windReq=null;return fetchWindDirect();}
    if(js.grid)WG=js.grid;
-   windData=js.d;const ft=new Date(js.fetched.replace(' UTC','Z').replace(' ','T'));windDay=(isNaN(ft)?js.fetched:ft.toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',timeZone:'UTC'})+' UTC')+(js.stale?' (latest available)':'');
+   windData=js.d;windRegion=js.region||null;const ft=new Date(js.fetched.replace(' UTC','Z').replace(' ','T'));windDay=(isNaN(ft)?js.fetched:ft.toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',timeZone:'UTC'})+' UTC')+(js.stale?' (latest available)':'');
    return windData;
   });
  windReq.catch(()=>{windReq=null;});
@@ -673,15 +679,25 @@ function fetchWindDirect(){
  windReq.catch(()=>{windReq=null;});
  return windReq;
 }
+function windGridAt(G,g,lat,lon){ // bilinear u,v from one grid (no wrap); null outside
+ const fx=(lon-G.lon0)/G.step,fy=(lat-G.lat0)/G.step;if(fx<0||fy<0||fx>G.nx-1||fy>G.ny-1)return null;
+ const x0=Math.min(Math.floor(fx),G.nx-2),y0=Math.min(Math.floor(fy),G.ny-2),tx=fx-x0,ty=fy-y0,k=(y,x)=>y*G.nx+x;
+ const bl=A=>(A[k(y0,x0)]*(1-tx)+A[k(y0,x0+1)]*tx)*(1-ty)+(A[k(y0+1,x0)]*(1-tx)+A[k(y0+1,x0+1)]*tx)*ty;
+ return {w:[bl(g.u),bl(g.v)],edge:Math.min(fx,fy,G.nx-1-fx,G.ny-1-fy)};
+}
 function windAt(lat,lon,level){
- const g=windData&&windData[level||wind.level];if(!g)return null;
+ const lv=level||wind.level,g=windData&&windData[lv];if(!g)return null;
  // longitudes wrap around the globe; latitudes beyond the grid reuse its edge rows
  const span=WG.nx*WG.step,fx=((((lon-WG.lon0)%span)+span)%span)/WG.step;
  const fy=Math.max(0,Math.min(WG.ny-1,(lat-WG.lat0)/WG.step));
  const x0=Math.floor(fx)%WG.nx,x1=(x0+1)%WG.nx,y0=Math.min(Math.floor(fy),WG.ny-2),tx=fx-Math.floor(fx),ty=fy-y0;
  const k=(y,x)=>y*WG.nx+x,a=k(y0,x0),b=k(y0,x1),c=k(y0+1,x0),e=k(y0+1,x1);
  const bl=A=>(A[a]*(1-tx)+A[b]*tx)*(1-ty)+(A[c]*(1-tx)+A[e]*tx)*ty;
- return [bl(g.u),bl(g.v)];
+ const glob=[bl(g.u),bl(g.v)];
+ // finer 2.5° grid along the western-disturbance corridor, blended into the global one over its outer cell
+ const R=windRegion&&windRegion.d[lv]&&windGridAt(windRegion.grid,windRegion.d[lv],lat,lon);
+ if(!R)return glob;
+ const t=Math.min(1,R.edge);return [glob[0]+(R.w[0]-glob[0])*t,glob[1]+(R.w[1]-glob[1])*t];
 }
 const WIND_RAMP=[[0,[20,40,110]],[.2,[30,120,190]],[.4,[40,190,170]],[.6,[150,210,70]],[.75,[250,200,50]],[.9,[240,90,60]],[1,[200,50,160]]];
 function windColor(s,level){
@@ -894,58 +910,100 @@ function mercatorToEquirect(src){
  return out;
 }
 // ---- Wind on the 3D globe: the same GFS data and colours as the 2D wind layer (Western disturbances 500 hPa,
-// Jet stream 250 hPa), drawn as a world texture (longitude -180..180 left to right) wrapped on the globe. ----
-const W3={w:1024,h:512};
+// Jet stream 250 hPa). Two layers: the whole world, plus a sharper patch over the western-disturbance corridor
+// (Mediterranean -> Pakistan) for when the globe is focused on Pakistan. Textures run longitude/latitude left-right/top-bottom.
+const WIND3_LAYERS=[
+ {key:'world',w:1024,h:512,lon0:-180,lon1:180,lat0:-90,lat1:90,parts:3500,radius:1.0045,line:1.1},
+ {key:'region',w:1536,h:768,lon0:30,lon1:90,lat0:15,lat1:45,parts:2200,radius:1.0055,line:1.3}];
+const W3R=WIND3_LAYERS[1];
+function inW3(L,lat,lon){return lat>=L.lat0&&lat<=L.lat1&&lon>=L.lon0&&lon<=L.lon1;}
+function makeWind3Layer(cfg){
+ const mk=()=>{const c=document.createElement('canvas');c.width=cfg.w;c.height=cfg.h;return c;},D=Math.PI/180;
+ const field=mk(),trails=mk(),comp=mk(),tex=new THREE.CanvasTexture(comp);
+ const geo=cfg.key==='world'?new THREE.SphereGeometry(cfg.radius,96,96)
+  :new THREE.SphereGeometry(cfg.radius,64,48,(cfg.lon0+180)*D,(cfg.lon1-cfg.lon0)*D,(90-cfg.lat1)*D,(cfg.lat1-cfg.lat0)*D);
+ const mesh=new THREE.Mesh(geo,new THREE.MeshBasicMaterial({map:tex,transparent:true,depthWrite:false}));
+ mesh.visible=false;t3.earth.add(mesh);
+ return {...cfg,field,trails,comp,tex,mesh,list:[]};
+}
 function buildWind3(level){
  if(!t3)return;
- if(!t3.wind){
-  const mk=()=>{const c=document.createElement('canvas');c.width=W3.w;c.height=W3.h;return c;};
-  const field=mk(),trails=mk(),comp=mk(),tex=new THREE.CanvasTexture(comp);
-  const mesh=new THREE.Mesh(new THREE.SphereGeometry(1.0045,96,96),new THREE.MeshBasicMaterial({map:tex,transparent:true,depthWrite:false}));
-  t3.earth.add(mesh);
-  t3.wind={field,trails,comp,tex,mesh,parts:[],level:null,frame:0};
- }
- const W=t3.wind;W.level=level;W.parts=[];W.mesh.visible=false;
+ if(!t3.wind)t3.wind={layers:WIND3_LAYERS.map(makeWind3Layer),level:null,frame:0};
+ const W=t3.wind;W.level=level;W.layers.forEach(L=>{L.list=[];L.mesh.visible=false;});
  fetchWind().then(()=>{
   if(W.level!==level)return;
-  // speed colours: one sample per 4x4 block on a small canvas, smoothed up to full size
-  const sw=W3.w/4,sh=W3.h/4,small=document.createElement('canvas');small.width=sw;small.height=sh;
-  const sc=small.getContext('2d'),img=sc.createImageData(sw,sh),px=img.data;
-  for(let j=0;j<sh;j++)for(let i=0;i<sw;i++){
-   const lat=90-(j+.5)/sh*180,lon=-180+(i+.5)/sw*360,w=windAt(lat,lon,level);if(!w)continue;
-   const c=windColor(Math.hypot(w[0],w[1]),level),o=(j*sw+i)*4;px[o]=c[0];px[o+1]=c[1];px[o+2]=c[2];px[o+3]=150;
-  }
-  sc.putImageData(img,0,0);
-  const fc=W.field.getContext('2d');fc.clearRect(0,0,W3.w,W3.h);fc.imageSmoothingEnabled=true;fc.drawImage(small,0,0,W3.w,W3.h);
-  W.trails.getContext('2d').clearRect(0,0,W3.w,W3.h);
-  for(let n=0;n<3500;n++)W.parts.push(spawn3({}));
-  W.mesh.visible=true;
+  W.layers.forEach(L=>{
+   // speed colours: one sample per 4x4 block on a small canvas, smoothed up to full size
+   const sw=L.w/4,sh=L.h/4,small=document.createElement('canvas');small.width=sw;small.height=sh;
+   const sc=small.getContext('2d'),img=sc.createImageData(sw,sh),px=img.data;
+   for(let j=0;j<sh;j++)for(let i=0;i<sw;i++){
+    const lat=L.lat1-(j+.5)/sh*(L.lat1-L.lat0),lon=L.lon0+(i+.5)/sw*(L.lon1-L.lon0);
+    if(L.key==='world'&&inW3(W3R,lat,lon))continue; // the detailed patch colours its own area (no doubled tint)
+    const w=windAt(lat,lon,level);if(!w)continue;
+    const c=windColor(Math.hypot(w[0],w[1]),level),o=(j*sw+i)*4;px[o]=c[0];px[o+1]=c[1];px[o+2]=c[2];px[o+3]=150;
+   }
+   sc.putImageData(img,0,0);
+   const fc=L.field.getContext('2d');fc.clearRect(0,0,L.w,L.h);fc.imageSmoothingEnabled=true;fc.drawImage(small,0,0,L.w,L.h);
+   L.trails.getContext('2d').clearRect(0,0,L.w,L.h);
+   for(let n=0;n<L.parts;n++)L.list.push(spawn3({},L));
+   L.mesh.visible=true;
+  });
  }).catch(()=>{if(W.level===level)toast('Wind data unavailable right now - try again later');});
 }
-function spawn3(p){p.lon=Math.random()*360-180;p.lat=Math.asin(Math.random()*2-1)*180/Math.PI;p.age=Math.random()*80|0;return p;}
-function stopWind3(){if(t3&&t3.wind){t3.wind.level=null;t3.wind.parts=[];t3.wind.mesh.visible=false;}}
+function spawn3(p,L){
+ if(L.key==='world'){do{p.lon=Math.random()*360-180;p.lat=Math.asin(Math.random()*2-1)*180/Math.PI;}while(inW3(W3R,p.lat,p.lon));} // the patch covers its own area
+ else{p.lon=L.lon0+Math.random()*(L.lon1-L.lon0);p.lat=L.lat0+Math.random()*(L.lat1-L.lat0);}
+ p.age=Math.random()*80|0;return p;
+}
+function stopWind3(){if(t3&&t3.wind){t3.wind.level=null;t3.wind.layers.forEach(L=>{L.list=[];L.mesh.visible=false;});}}
 function windFrame3(){
- const W=t3&&t3.wind;if(!W||!W.level||!W.parts.length)return;
- const tc=W.trails.getContext('2d');
- tc.globalCompositeOperation='destination-in';tc.fillStyle='rgba(0,0,0,.93)';tc.fillRect(0,0,W3.w,W3.h);
- tc.globalCompositeOperation='source-over';tc.strokeStyle='rgba(255,255,255,.9)';tc.lineWidth=1.1;tc.beginPath();
- const k=W.level===250?.0045:.007,X=lon=>(lon+180)/360*W3.w,Y=lat=>(90-lat)/180*W3.h;
- W.parts.forEach(p=>{
-  const w=windAt(p.lat,p.lon,W.level);
-  if(!w||++p.age>100||Math.abs(p.lat)>84){spawn3(p);p.age=0;return;}
-  let lon=p.lon+w[0]*k/Math.max(.2,Math.cos(p.lat*Math.PI/180)),lat=p.lat+w[1]*k;
-  if(lon>180)lon-=360;if(lon<-180)lon+=360;
-  if(Math.abs(lon-p.lon)<180){tc.moveTo(X(p.lon),Y(p.lat));tc.lineTo(X(lon),Y(lat));}
-  p.lon=lon;p.lat=lat;
+ const W=t3&&t3.wind;if(!W||!W.level)return;
+ const k=W.level===250?.0045:.007;
+ W.layers.forEach(L=>{
+  if(!L.list.length)return;
+  const tc=L.trails.getContext('2d'),X=lon=>(lon-L.lon0)/(L.lon1-L.lon0)*L.w,Y=lat=>(L.lat1-lat)/(L.lat1-L.lat0)*L.h;
+  tc.globalCompositeOperation='destination-in';tc.fillStyle='rgba(0,0,0,.93)';tc.fillRect(0,0,L.w,L.h);
+  tc.globalCompositeOperation='source-over';tc.strokeStyle='rgba(255,255,255,.9)';tc.lineWidth=L.line;tc.beginPath();
+  L.list.forEach(p=>{
+   const w=windAt(p.lat,p.lon,W.level);
+   if(!w||++p.age>100||Math.abs(p.lat)>84){spawn3(p,L);p.age=0;return;}
+   let lon=p.lon+w[0]*k/Math.max(.2,Math.cos(p.lat*Math.PI/180)),lat=p.lat+w[1]*k;
+   if(L.key==='world'){if(lon>180)lon-=360;if(lon<-180)lon+=360;if(inW3(W3R,lat,lon)){spawn3(p,L);p.age=0;return;}}
+   else if(!inW3(L,lat,lon)){spawn3(p,L);p.age=0;return;}
+   if(Math.abs(lon-p.lon)<180){tc.moveTo(X(p.lon),Y(p.lat));tc.lineTo(X(lon),Y(lat));}
+   p.lon=lon;p.lat=lat;
+  });
+  tc.stroke();
  });
- tc.stroke();
- if(++W.frame%2)return; // upload the texture every other frame
- const cc=W.comp.getContext('2d');cc.clearRect(0,0,W3.w,W3.h);cc.drawImage(W.field,0,0);cc.drawImage(W.trails,0,0);
- W.tex.needsUpdate=true;
+ const L=W.layers[++W.frame%2]; // upload one layer's texture per frame, alternating
+ const cc=L.comp.getContext('2d');cc.clearRect(0,0,L.w,L.h);cc.drawImage(L.field,0,0);cc.drawImage(L.trails,0,0);
+ L.tex.needsUpdate=true;
+}
+
+// ---- Focus the 3D globe on Pakistan (button, and automatically for the wind tabs) ----
+function globeFocusPakistan(){
+ if(!t3)return;
+ // find the globe rotation (same Euler order as the globe) that turns Pakistan to face the camera
+ const v=latLonToV3(30.5,70,1),e=new THREE.Euler(0,0,0,'YXZ'),w=new THREE.Vector3();let best={z:-2};
+ for(let rx=-1.1;rx<=1.1;rx+=.01)for(let ry=-Math.PI;ry<Math.PI;ry+=.01){e.set(rx,ry,0,'YXZ');w.copy(v).applyEuler(e);if(w.z>best.z)best={z:w.z,rx,ry};}
+ t3.focus={rx:best.rx,ry:best.ry,zoom:1.75};t3.spin=false;t3.pakFocus=true;globeNavState();
+}
+function globeWhole(){if(!t3)return;t3.focus={zoom:3.1};t3.spin=true;t3.pakFocus=false;globeNavState();}
+function globeSpin(){if(!t3)return;t3.spin=!t3.spin;if(t3.spin)t3.focus=t3.focus&&t3.focus.zoom?{zoom:t3.focus.zoom}:null;globeNavState();}
+function globeNavState(){
+ const b=document.querySelectorAll('#globeNav button');if(!b.length||!t3)return;
+ b[0].classList.toggle('on',!!t3.pakFocus);b[1].classList.toggle('on',t3.spin!==false);
+}
+function globeStep(){ // called every frame in 3D: ease toward the focus target
+ const now=performance.now(),dt=Math.min(.25,(now-(t3.lastStep||now))/1000);t3.lastStep=now;
+ const f=t3.focus;if(!f)return;const E=t3.earth,a=1-Math.exp(-dt*4); // time-based easing: ~1 s on any machine
+ if(f.rx!=null){E.rotation.x+=(f.rx-E.rotation.x)*a;let d=f.ry-E.rotation.y;d=Math.atan2(Math.sin(d),Math.cos(d));E.rotation.y+=d*a;}
+ if(f.zoom)t3.cam.position.z+=(f.zoom-t3.cam.position.z)*a;
+ if(Math.abs(t3.cam.position.z-(f.zoom||t3.cam.position.z))<.002&&(f.rx==null||(Math.abs(f.rx-E.rotation.x)<.002&&Math.abs(Math.atan2(Math.sin(f.ry-E.rotation.y),Math.cos(f.ry-E.rotation.y)))<.002)))t3.focus=null; // arrived
 }
 function buildLive3(key){ if(!t3)return;
  const s=sources[key];
- if(s&&s.wind){if(t3.overlay)t3.overlay.visible=false;t3.liveKey=key;buildWind3(s.wind);return;}
+ if(s&&s.wind){if(t3.overlay)t3.overlay.visible=false;t3.liveKey=key;buildWind3(s.wind);globeFocusPakistan();return;}
  stopWind3();
  if(!s||!s.gibs){if(t3.overlay)t3.overlay.visible=false;return;}
  t3.liveKey=key;
@@ -1021,11 +1079,11 @@ function init3D(){
    bi.src=BOUND_TEX;
   }
  t3={s,cam,rd,earth,markers,atmo,tint:new THREE.Color(0x3ac0ff),wrap:document.getElementById('label3dWrap'),labels:[],drag:false};
- host.addEventListener('pointerdown',e=>{t3.drag=true;drag3={x:e.clientX,y:e.clientY};host.setPointerCapture(e.pointerId);});
+ host.addEventListener('pointerdown',e=>{t3.drag=true;t3.focus=null;t3.spin=false;t3.pakFocus=false;globeNavState();drag3={x:e.clientX,y:e.clientY};host.setPointerCapture(e.pointerId);});
  host.addEventListener('pointermove',e=>{if(!t3.drag||!drag3)return;earth.rotation.y+=(e.clientX-drag3.x)*.005;earth.rotation.x=Math.max(-1.1,Math.min(1.1,earth.rotation.x+(e.clientY-drag3.y)*.004));drag3={x:e.clientX,y:e.clientY};});
  host.addEventListener('pointerup',()=>{t3.drag=false;drag3=null;});
  host.addEventListener('pointercancel',()=>{t3.drag=false;drag3=null;});
- host.addEventListener('wheel',e=>{e.preventDefault();cam.position.z=Math.max(1.5,Math.min(6,cam.position.z+e.deltaY*.0022));},{passive:false});
+ host.addEventListener('wheel',e=>{e.preventDefault();if(t3.focus)t3.focus.zoom=null;cam.position.z=Math.max(1.5,Math.min(6,cam.position.z+e.deltaY*.0022));},{passive:false});
  addEventListener('resize',()=>{if(!t3)return;cam.aspect=innerWidth/innerHeight;cam.updateProjectionMatrix();rd.setSize(innerWidth,innerHeight);});
  buildDriver3(active);
 }
@@ -1885,7 +1943,7 @@ async function aiAskPuter(onText){
  return text;
 }
 
-(function animate(){requestAnimationFrame(animate);if(mode3d&&t3){if(!t3.drag)t3.earth.rotation.y+=.0016;t3.atmo.forEach(m=>m.material.color.lerp(t3.tint,.07));windFrame3();if(t3.hubGlow)t3.hubGlow.material.opacity=.55+.35*Math.sin(performance.now()*.004);updateLabels3d();t3.rd.render(t3.s,t3.cam)}})();
+(function animate(){requestAnimationFrame(animate);if(mode3d&&t3){globeStep();if(!t3.drag&&t3.spin!==false)t3.earth.rotation.y+=.0016;t3.atmo.forEach(m=>m.material.color.lerp(t3.tint,.07));windFrame3();if(t3.hubGlow)t3.hubGlow.material.opacity=.55+.35*Math.sin(performance.now()*.004);updateLabels3d();t3.rd.render(t3.s,t3.cam)}})();
 </script>
 </body>
 </html>
