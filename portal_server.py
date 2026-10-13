@@ -27,6 +27,8 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
 import anthropic
 
+import portal_db  # stores every API download in PostgreSQL when PORTAL_DB_PASSWORD is set
+
 ROOT = os.path.dirname(os.path.abspath(__file__))
 INDICES = os.path.join(ROOT, 'lib', 'indices.js')
 PORT = int(os.environ.get('PORTAL_PORT', '8000'))
@@ -254,6 +256,7 @@ def _refresh_wind_forever():
                         json.dump(fresh, f)
                 _wind_status = ''
                 print(f'Wind data refreshed ({fresh["fetched"]})', flush=True)
+                portal_db.enqueue('wind', fresh)
             except urllib.error.HTTPError as e:
                 try:
                     reason = json.loads(e.read()).get('reason', '')
@@ -297,6 +300,7 @@ def get_forecast(lat, lon):
         payload['fetched'] = dt.datetime.now(dt.timezone.utc).strftime('%Y-%m-%d %H:%M UTC')
         with _forecast_lock:
             _forecasts[key] = (time.time(), payload)
+        portal_db.enqueue('point_forecast', payload, *key)
         return payload, None
     except (urllib.error.URLError, OSError, ValueError) as e:
         if hit:
@@ -374,6 +378,7 @@ def _refresh_pak_grid_forever():
                 os.replace(tmp, PAK_CACHE)
                 _pak_status = ''
                 print(f'Pakistan forecast grid refreshed ({fresh["fetched"]})', flush=True)
+                portal_db.enqueue('weather_grid', fresh)
             except Exception as e:  # keep the last good copy; retry later
                 _pak_status = f'Pakistan forecast temporarily unavailable ({e})'
                 print(_pak_status, flush=True)
@@ -479,6 +484,7 @@ def _refresh_aq_forever():
                 os.replace(tmp, AQ_CACHE)
                 _aq_status = ''
                 print(f'Air-quality grid refreshed ({fresh["fetched"]})', flush=True)
+                portal_db.enqueue('air_quality_grid', fresh)
             except Exception as e:  # keep the last good copy; retry later
                 _aq_status = f'Air-quality map temporarily unavailable ({e})'
                 print(_aq_status, flush=True)
@@ -513,6 +519,7 @@ def get_aq_point(lat, lon):
         payload['fetched'] = dt.datetime.now(dt.timezone.utc).strftime('%Y-%m-%d %H:%M UTC')
         with _aq_lock:
             _aq_points[key] = (time.time(), payload)
+        portal_db.enqueue('point_air', payload, *key)
         return payload, None
     except (urllib.error.URLError, OSError, ValueError) as e:
         if hit:
@@ -535,6 +542,7 @@ def _refresh_climate_data_forever():
             print('Refreshing climate data (NOAA, NASA, Rutgers)...', flush=True)
             try:
                 update_data.update()
+                portal_db.enqueue('climate', json.loads(load_data()))
             except Exception as e:  # keep the last good file; try again in an hour
                 print(f'Climate data refresh failed: {e}', flush=True)
                 time.sleep(3600)
@@ -774,6 +782,15 @@ if __name__ == '__main__':
         print('Note: ANTHROPIC_API_KEY is not set - the Claude assistant will only work with an `ant auth login` profile.', flush=True)
     if not os.environ.get('XAI_API_KEY'):
         print('Note: XAI_API_KEY is not set - the Grok assistant is unavailable until it is.', flush=True)
+    if portal_db.enabled():
+        print('Database storage on (PostgreSQL, schema climate_portal)', flush=True)
+        for kind, path in [('wind', WIND_CACHE), ('weather_grid', PAK_CACHE), ('air_quality_grid', AQ_CACHE)]:
+            try:
+                with open(path, encoding='utf-8') as f:
+                    portal_db.enqueue(kind, json.load(f))
+            except (OSError, ValueError):
+                pass
+        portal_db.enqueue('climate', json.loads(load_data()))
     threading.Thread(target=_refresh_wind_forever, daemon=True).start()
     threading.Thread(target=_refresh_climate_data_forever, daemon=True).start()
     threading.Thread(target=_refresh_pak_grid_forever, daemon=True).start()

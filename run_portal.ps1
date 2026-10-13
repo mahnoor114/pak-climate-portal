@@ -72,7 +72,7 @@ if (Test-Portal) {
 
 # API keys are user environment variables (setx). A process started at login already has them, but read
 # them explicitly so a key added after login is picked up on the next restart.
-foreach ($name in 'XAI_API_KEY', 'ANTHROPIC_API_KEY', 'PORTAL_PORT') {
+foreach ($name in 'XAI_API_KEY', 'ANTHROPIC_API_KEY', 'PORTAL_PORT', 'PORTAL_DB_PASSWORD', 'PORTAL_DB_NAME') {
     $v = [Environment]::GetEnvironmentVariable($name, 'User')
     if ($v) { Set-Item -Path "Env:$name" -Value $v }
 }
