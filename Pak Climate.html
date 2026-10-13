@@ -1800,9 +1800,10 @@ addEventListener('keydown',e=>{if(e.key==='Escape')closeDriverCard();});
 
 document.querySelectorAll('.bottombar .layer').forEach(btn=>{const d=pts3d[btn.dataset.layer];if(d)btn.style.setProperty('--c',d.color);});
 function globeTint(key){
- const c=(pts3d[key]||{}).color||ACCENT;
- document.getElementById('globe3d').style.setProperty('--glow',c);
- if(t3)t3.tint=new THREE.Color(c);
+ const c=(pts3d[key]||{}).color||ACCENT,windTab=!!(sources[key]&&sources[key].wind);
+ // wind tabs (Western disturbances, Jet stream): no coloured halo around the globe, so the wind itself stands out
+ document.getElementById('globe3d').style.setProperty('--glow',windTab?'#0b1a2e':c);
+ if(t3){t3.tint=new THREE.Color(c);t3.atmo.forEach(m=>m.visible=!windTab);}
 }
 let globePreview=null;
 function globeHover(key){ // key = hovered driver, or null to go back to the selected one
