@@ -1,0 +1,1950 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pakistan Climate Driver Intelligence · Prototype A (Command Center)</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%8C%90%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="lib/leaflet.css">
+<script src="lib/chart.umd.js"></script>
+<script src="lib/leaflet.js"></script>
+<script src="lib/three.min.js"></script>
+<script src="lib/earth.js"></script>
+<script src="lib/boundaries.js"></script>
+<script src="lib/indices.js"></script>
+<script src="lib/countries.js"></script>
+<script src="lib/pak_boundary.js"></script>
+<script src="lib/districts.js"></script>
+<style>
+:root{
+ --bg:#06101a; --panel:rgba(7,20,31,.86); --panel2:rgba(12,31,45,.88);
+ --line:rgba(120,190,220,.20); --text:#eaf7ff; --muted:#b3cad8;
+ --cyan:#35d9ff; --green:#4ee59b; --amber:#ffc857; --red:#ff6677; --purple:#a987ff;
+}
+*{box-sizing:border-box} html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#030a10;color:var(--text);font-family:Inter,Segoe UI,Arial,sans-serif}
+#map{position:absolute;inset:0}
+.leaflet-control-attribution{background:rgba(0,0,0,.55)!important;color:#a9bdc8!important}
+.leaflet-control-attribution a{color:#70dfff!important}
+.topbar{position:absolute;z-index:1000;left:18px;right:18px;top:14px;height:62px;display:flex;align-items:center;justify-content:space-between;padding:10px 16px;border:1px solid var(--line);border-radius:18px;background:rgba(4,15,24,.84);backdrop-filter:blur(14px);box-shadow:0 12px 40px rgba(0,0,0,.35)}
+.brand{display:flex;align-items:center;gap:12px}.brandmark{width:42px;height:42px;border-radius:12px;display:grid;place-items:center;background:linear-gradient(135deg,#0b7695,#12334a);border:1px solid #3bdcff;color:#fff;font-weight:800;font-size:17px}
+.title{font-size:17px;font-weight:800;letter-spacing:.3px}.subtitle{font-size:10px;color:var(--muted);margin-top:2px}
+.status{display:flex;gap:10px;align-items:center}.pill{padding:7px 11px;border-radius:999px;border:1px solid var(--line);background:rgba(255,255,255,.04);font-size:10px;color:#b9d3df}.live{color:#70f0b0}.dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:#49e89c;box-shadow:0 0 10px #49e89c;margin-right:5px}
+
+.left{position:absolute;z-index:900;top:91px;left:18px;width:250px;bottom:172px;overflow-y:auto!important;scrollbar-width:thin;scrollbar-color:#0f5f78 transparent;padding:12px;border:1px solid var(--line);border-radius:18px;background:var(--panel);backdrop-filter:blur(16px);box-shadow:0 18px 50px rgba(0,0,0,.34);overflow:hidden}
+.section-title{font-size:11.5px;color:#6fdcff;text-transform:uppercase;letter-spacing:1.4px;font-weight:800;margin:4px 4px 9px}
+.layer{width:100%;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px 9px;margin:4px 0;border-radius:11px;background:rgba(255,255,255,.035);border:1px solid transparent;color:#d7edf6;cursor:pointer;font-size:11px;text-align:left}
+.layer:hover{background:rgba(53,217,255,.08);border-color:rgba(53,217,255,.18)}
+.layer.active{background:rgba(53,217,255,.12);border-color:rgba(53,217,255,.35)}
+.icon{width:23px;text-align:center;font-size:14px}.layername{flex:1}.toggle{width:27px;height:15px;border-radius:20px;background:#253a46;position:relative}.toggle:after{content:"";position:absolute;width:11px;height:11px;top:2px;left:2px;border-radius:50%;background:#718894;transition:.2s}.active .toggle{background:#087b98}.active .toggle:after{left:14px;background:#dfffff}
+.driver{margin-top:9px;padding:10px;border-radius:12px;border:1px solid var(--line);background:rgba(0,0,0,.14);cursor:pointer;transition:.2s}.driver:hover{border-color:rgba(53,217,255,.45);background:rgba(53,217,255,.07)}.driver .small{margin-top:6px}
+.driver-head{display:flex;justify-content:space-between;font-size:12px;margin-bottom:7px}.score{font-weight:800;color:var(--cyan)}.bar{height:6px;border-radius:10px;background:#1c2b35;overflow:hidden}.bar i{display:block;height:100%;transition:width .8s ease;border-radius:10px;background:linear-gradient(90deg,#35d9ff,#4ee59b)}
+.small{font-size:10.5px;color:var(--muted);line-height:1.45}
+
+.right{position:absolute;z-index:900;top:91px;right:18px;width:330px;bottom:172px;display:flex;flex-direction:column;gap:10px;pointer-events:none;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:#0f5f78 transparent}
+.card{pointer-events:auto;border:1px solid var(--line);border-radius:17px;background:var(--panel);backdrop-filter:blur(16px);box-shadow:0 18px 50px rgba(0,0,0,.3);padding:12px}
+.card h3{margin:0 0 6px;font-size:12.5px;text-transform:uppercase;letter-spacing:1px;color:#77dfff}.value{font-size:28px;font-weight:850}.muted{font-size:10.5px;color:var(--muted)}
+.kpis{display:grid;grid-template-columns:1fr 1fr;gap:8px}.kpi{padding:9px;border-radius:11px;background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.05)}
+.chartbox{height:180px}.piebox{height:175px}.horizon{cursor:pointer;transition:.2s}.horizon:hover{border-color:rgba(53,217,255,.45);background:rgba(53,217,255,.08);transform:translateY(-1px)}.horizon b{font-size:14px}.hstat{font-size:9.5px;color:#cbd5e1;margin-top:5px;line-height:1.4}.stamp{font-size:9.5px;color:#a8b8c6;margin-top:10px;line-height:1.45}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.legend{display:flex;flex-wrap:wrap;gap:8px;font-size:10.5px;color:var(--muted)}.legend span:before{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;background:currentColor;margin-right:4px}
+.srcrow{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
+.srclink{flex:1;text-align:center;padding:6px 5px;border-radius:8px;border:1px solid var(--line);background:rgba(53,217,255,.07);color:#8fe9ff;font-size:11px;text-decoration:none;white-space:nowrap}
+.srclink:hover{background:rgba(53,217,255,.16);border-color:rgba(53,217,255,.4)}
+.livesrc{margin-top:7px;font-size:9.5px;color:#6fb7cf;letter-spacing:.3px}
+.viewbtn{cursor:pointer;font-weight:800;letter-spacing:.5px;font-family:inherit}
+.viewbtn:hover{border-color:rgba(53,217,255,.45)}
+.viewbtn.on{background:rgba(53,217,255,.18);border-color:rgba(53,217,255,.65);color:#a5f0ff}
+@property --glow{syntax:'<color>';inherits:false;initial-value:#38bdf8}
+#globe3d{position:absolute;inset:0;z-index:600;display:none;--glow:#38bdf8;transition:--glow .6s ease;background:radial-gradient(closest-side at 50% 50%,color-mix(in srgb,var(--glow) 55%,#071527) 0%,color-mix(in srgb,var(--glow) 38%,#06101e) 62%,color-mix(in srgb,var(--glow) 18%,#040b16) 85%,color-mix(in srgb,var(--glow) 7%,#030a12) 100%),#030a12}
+#globe3d canvas{display:block}
+.windcv{position:absolute;left:0;top:0;z-index:450;pointer-events:none;display:none}
+.windcv.on{display:block}
+#label3dWrap{position:absolute;inset:0;z-index:610;pointer-events:none;display:none}
+.lbl3d{position:absolute;transform:translate(-50%,-165%);padding:4px 10px 4px 8px;border-radius:999px;background:rgba(6,20,36,.78);border:1px solid rgba(120,220,255,.38);color:#d9f3ff;font-size:9px;letter-spacing:.3px;white-space:nowrap;backdrop-filter:blur(4px);box-shadow:0 0 14px rgba(58,192,255,.18),0 4px 14px rgba(0,0,0,.55)}
+.lbl3d::before{content:'';display:inline-block;width:5px;height:5px;border-radius:50%;background:#3ac0ff;box-shadow:0 0 6px #3ac0ff;margin-right:6px;vertical-align:1px}
+.lbl3d::after{content:'';position:absolute;left:50%;bottom:-11px;width:1px;height:11px;background:linear-gradient(rgba(140,230,255,0),rgba(140,230,255,.65))}
+.lbl3d.hub{border-color:rgba(78,229,155,.55);color:#c9ffe6}
+.lbl3d.hub::before{background:#4ee59b;box-shadow:0 0 6px #4ee59b}
+.lbl3d.hub::after{background:linear-gradient(rgba(78,229,155,0),rgba(78,229,155,.65))}
+#drvModal{display:none;position:fixed;inset:0;z-index:1500;background:rgba(2,8,14,.72);backdrop-filter:blur(6px);align-items:center;justify-content:center;padding:16px}
+#drvModal.on{display:flex}
+.dvmCard{position:relative;width:min(980px,96vw);max-height:94vh;overflow:auto;background:radial-gradient(700px 420px at 22% 40%,rgba(22,70,120,.35),rgba(0,0,0,0) 70%),linear-gradient(165deg,rgba(9,24,42,.97),rgba(4,11,21,.98));border:1px solid rgba(58,192,255,.35);border-radius:16px;box-shadow:0 30px 80px rgba(0,0,0,.7),0 0 44px rgba(58,192,255,.12);padding:16px 20px 14px}
+.dvmHead{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.dvmChip{width:12px;height:12px;border-radius:50%;box-shadow:0 0 8px currentColor}
+.dvmTitle{font-size:16px;font-weight:700;color:#e8f6ff}
+.dvmSub{font-size:9px;color:#a8b8c6;letter-spacing:1.4px;text-transform:uppercase}
+#dvmClose{margin-left:auto;background:rgba(58,192,255,.08);border:1px solid rgba(58,192,255,.3);color:#bfeaff;width:28px;height:28px;border-radius:50%;cursor:pointer;font-size:13px}
+.dvmBody{display:flex;gap:18px;flex-wrap:wrap;align-items:stretch}
+.dvmGlobeWrap{flex:0 0 auto;text-align:center}
+.dvmGlobe{position:relative;width:380px;height:380px;cursor:grab;touch-action:none}
+.dvmGlobe canvas{display:block}
+.dvmGlobe .lbl3d{font-size:8.5px;padding:3px 8px 3px 7px}
+#dvmLbls{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+.dvmCap{font-size:9px;color:#a8b8c6;margin-top:2px;letter-spacing:.5px}
+.dvmRight{flex:1 1 380px;min-width:300px;display:flex;flex-direction:column;gap:10px}
+.dvmKpis{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.dvmKpi{padding:9px 10px;border-radius:11px;background:rgba(255,255,255,.035);border:1px solid rgba(120,190,220,.16)}
+.dvmKpi .k{font-size:9px;color:#a8b8c6;text-transform:uppercase;letter-spacing:.8px}
+.dvmKpi .v{font-size:20px;font-weight:800;color:#eaf7ff;margin-top:3px}
+.dvmKpi .s{font-size:9px;color:#b6c4d0;margin-top:2px}
+.dvmPanel{flex:1;padding:10px 12px;border-radius:12px;background:rgba(255,255,255,.03);border:1px solid rgba(120,190,220,.16);display:flex;flex-direction:column}
+.dvmChartHead{display:flex;justify-content:space-between;gap:8px;align-items:baseline;margin-bottom:6px}
+.dvmChartHead b{font-size:11px;color:#77dfff;text-transform:uppercase;letter-spacing:.8px}
+.dvmChartHead a{font-size:9px;color:#5fd0ff;text-decoration:none;white-space:nowrap}
+.dvmChartBox{position:relative;flex:1;min-height:230px}
+.dvmEmpty{position:absolute;inset:0;display:none;align-items:center;justify-content:center;text-align:center;font-size:11px;color:#8ca9b9;padding:20px}
+.dvmDesc{margin:12px 2px 9px;font-size:11.5px;line-height:1.6;color:#a9c6d6;border-left:2px solid rgba(58,192,255,.4);padding-left:9px}
+.dvmLinks{display:flex;gap:14px;flex-wrap:wrap;align-items:center;font-size:10px}
+.dvmLinks a{color:#5fd0ff;text-decoration:none;border:1px solid rgba(58,192,255,.3);padding:4px 9px;border-radius:999px;background:rgba(58,192,255,.07)}
+.dvmLinks span{color:#6d8ea1}
+body.mode3d #globe3d,body.mode3d #label3dWrap{display:block}
+body.mode3d #map{display:none}
+.maplabel{position:absolute;z-index:700;left:50%;top:86px;transform:translateX(-50%);padding:6px 12px;border-radius:999px;background:rgba(4,15,24,.78);border:1px solid var(--line);font-size:9px;color:#a9d9e8;backdrop-filter:blur(10px)}
+.legendmap{position:absolute;z-index:800;left:260px;bottom:20px;background:rgba(4,15,24,.78);border:1px solid var(--line);padding:8px 10px;border-radius:10px;font-size:9px;color:#aac2ce;backdrop-filter:blur(10px)}
+.legendmap b{color:#eaf7ff}
+.bottombar{position:absolute;z-index:950;left:18px;right:72px;bottom:26px;display:flex;gap:10px;align-items:stretch;overflow-x:auto;padding:10px;border:1px solid rgba(255,255,255,.12);border-radius:22px;background:linear-gradient(135deg,rgba(255,255,255,.08),rgba(255,255,255,.02)),rgba(4,15,24,.55);backdrop-filter:blur(22px) saturate(170%);-webkit-backdrop-filter:blur(22px) saturate(170%);box-shadow:inset 0 1px 0 rgba(255,255,255,.14),0 18px 48px rgba(0,0,0,.5);scrollbar-width:thin;scrollbar-color:#0f5f78 transparent}
+.bottombar::-webkit-scrollbar{height:5px}.bottombar::-webkit-scrollbar-thumb{background:#0f5f78;border-radius:8px}
+/* ===== Calm theme: one accent (sky blue), neutral glass, colour only where it carries meaning ===== */
+:root{
+ --accent:#38bdf8; --accent-soft:rgba(56,189,248,.16); --accent-line:rgba(56,189,248,.55);
+ --surface:rgba(8,16,26,.88); --surface-2:rgba(255,255,255,.04); --surface-3:rgba(255,255,255,.08);
+ --border:rgba(148,163,184,.2); --border-strong:rgba(148,163,184,.38);
+ --ink:#eef4f8; --ink-dim:#b6c4d0;
+ --glass-fill:var(--surface);
+ --glass-blur:blur(18px) saturate(140%);
+ --glass-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 12px 32px rgba(0,0,0,.35);
+}
+
+/* Bottom bar: neutral cards, each driver's colour only on its icon and selection marker */
+.bottombar .layer{position:relative;flex:0 0 auto;width:140px;min-height:100px;margin:0;flex-direction:column;justify-content:center;align-items:center;gap:8px;padding:12px 10px;border-radius:16px;text-align:center;font-size:13.5px;font-weight:600;line-height:1.25;color:var(--ink);white-space:normal;
+ border:1px solid var(--border);background:var(--surface-2);transition:transform .2s,border-color .2s,background .2s}
+.bottombar .layer:hover{transform:translateY(-2px);border-color:var(--border-strong);background:var(--surface-3)}
+.bottombar .layer:active{transform:none}
+.bottombar .layername{position:relative}
+.bottombar .icon{display:grid;place-items:center;width:42px;height:42px;border-radius:50%;font-size:20px;line-height:1;color:var(--c,var(--accent));background:color-mix(in srgb,var(--c,var(--accent)) 15%,transparent);border:1px solid color-mix(in srgb,var(--c,var(--accent)) 40%,transparent)}
+.bottombar .layer.active{border-color:color-mix(in srgb,var(--c,var(--accent)) 70%,transparent);background:color-mix(in srgb,var(--c,var(--accent)) 14%,rgba(255,255,255,.03));box-shadow:inset 0 -3px 0 var(--c,var(--accent))}
+.bottombar .layer.active .layername{color:#fff;font-weight:700}
+.bottombar .layer.active .icon{color:#04121c;background:var(--c,var(--accent));border-color:var(--c,var(--accent))}
+.bottombar .toggle{display:none}
+#toast{position:absolute;z-index:2000;left:50%;bottom:184px;transform:translateX(-50%) translateY(15px);opacity:0;transition:.25s;padding:10px 15px;border-radius:10px;font-size:11px;color:var(--ink);pointer-events:none;background:var(--surface);backdrop-filter:var(--glass-blur);border:1px solid var(--border-strong);box-shadow:var(--glass-shadow)}
+@media(max-width:1100px){.right{width:290px}.left{width:220px}.bottombar .layer{width:124px;font-size:12.5px}}
+@media(max-width:950px){.title{font-size:14px}.subtitle{display:none}}
+
+/* Panels */
+.topbar,.left,.card,.bottombar,.maplabel,.dvmCard{position:absolute;background:var(--glass-fill);backdrop-filter:var(--glass-blur);-webkit-backdrop-filter:var(--glass-blur);border:1px solid var(--border);box-shadow:var(--glass-shadow)}
+.card,.dvmCard{position:relative}
+.bottombar{display:block;overflow:visible;padding:8px;border-radius:20px;right:150px} /* room on the right for the Ask AI button */
+@media(max-width:1100px){.bottombar{right:76px}}
+.dvmCard{overflow:auto;background:rgba(8,17,28,.94)}
+.maplabel{color:var(--ink-dim)}
+/* Inner scrollers (left panel, bottom bar) */
+.left{overflow:visible!important;padding:0}
+.leftScroll{height:100%;overflow-y:auto;padding:12px;border-radius:inherit;scrollbar-width:thin;scrollbar-color:var(--border-strong) transparent}
+.bbtrack{display:flex;gap:8px;align-items:stretch;overflow-x:auto;padding:2px 2px 6px;border-radius:14px;scrollbar-width:thin;scrollbar-color:var(--border-strong) transparent}
+.right{scrollbar-color:var(--border-strong) transparent}
+/* Type */
+.section-title,.card h3,.dvmChartHead b{color:var(--accent)}
+.title{color:#fff}
+.brandmark{background:linear-gradient(135deg,#0ea5e9,#1e40af);border:1px solid var(--accent-line);box-shadow:none}
+/* Pills and buttons: neutral; the accent marks the active state and the main action */
+.pill{background:var(--surface-2);border:1px solid var(--border);color:#cfe0ea;box-shadow:none}
+.viewbtn{background:var(--surface-2);border-color:var(--border-strong);color:var(--ink)}
+.viewbtn:hover{background:var(--surface-3);border-color:var(--accent-line)}
+.viewbtn.on{background:var(--accent-soft);border-color:var(--accent);color:#fff}
+/* Influence rows: colour = the index's own colour (same as the trend chart lines) */
+#row_monsoon{--c:#38bdf8}#row_winter{--c:#cbd5e1}#row_heat{--c:#f59e0b}#row_flood{--c:#2dd4bf}
+.driver{background:var(--surface-2);border:1px solid var(--border)}
+.driver:hover{border-color:var(--border-strong);background:var(--surface-3)}
+.driver .score{color:var(--c,var(--accent))}
+.driver .bar{background:rgba(255,255,255,.07)}
+.driver .bar i{background:var(--c,var(--accent))}
+/* Forecast horizon tiles */
+.horizon{background:var(--surface-2);border:1px solid var(--border);border-left:3px solid var(--c,var(--accent))}
+.horizon:nth-child(1){--c:#a78bfa}.horizon:nth-child(2){--c:#34d399}.horizon:nth-child(3){--c:#38bdf8}.horizon:nth-child(4){--c:#fbbf24}
+.horizon b{color:#fff}
+.horizon:hover{border-color:var(--accent-line);border-left-color:var(--c,var(--accent));background:var(--surface-3);transform:none}
+/* Links and driver-card details */
+.srclink,.dvmLinks a{background:var(--surface-2);border:1px solid var(--border-strong);color:var(--accent)}
+.srclink:hover,.dvmLinks a:hover{background:var(--accent-soft);border-color:var(--accent-line)}
+.dvmKpi,.dvmPanel{background:var(--surface-2);border:1px solid var(--border)}
+#dvmClose{background:var(--surface-3);border-color:var(--border-strong);color:var(--ink)}
+
+/* ===== Region map ===== */
+#map{background:#05080f}
+.pkTip{background:rgba(8,16,26,.92);color:#eef4f8;border:1px solid rgba(148,163,184,.38);border-radius:8px;font-size:11px;box-shadow:none}
+.pkTip:before{display:none}
+.leaflet-pakBoundary-pane path.cty-pk,.leaflet-regions-pane path.cty-pk{filter:drop-shadow(0 0 4px rgba(56,189,248,.6))}
+
+/* ===== 3D terrain view ===== */
+#terrain3d{position:absolute;inset:0;z-index:600;display:none;background:#030a12}
+body.modeTerrain #terrain3d{display:block}
+body.modeTerrain #map{display:none}
+#terrainNav{position:absolute;z-index:700;left:50%;top:118px;transform:translateX(-50%);display:none;flex-wrap:wrap;justify-content:center;align-items:center;gap:6px;max-width:calc(100vw - 660px);padding:6px 10px;border-radius:16px;background:var(--surface);border:1px solid var(--border);backdrop-filter:blur(12px)}
+body.modeTerrain #terrainNav{display:flex}
+#globeNav{position:absolute;z-index:700;left:50%;top:118px;transform:translateX(-50%);display:none;gap:6px;padding:6px 10px;border-radius:16px;background:var(--surface);border:1px solid var(--border);backdrop-filter:blur(12px)}
+body.mode3d #globeNav{display:flex}
+#globeNav button{font:inherit;font-size:10.5px;color:var(--ink);cursor:pointer;padding:5px 10px;border-radius:999px;border:1px solid var(--border-strong);background:var(--surface-2)}
+#globeNav button:hover{border-color:var(--accent-line);background:var(--surface-3)}
+#globeNav button.on{border-color:var(--accent);background:var(--accent-soft);color:#fff}
+#terrainNav b{font-size:9.5px;letter-spacing:1px;text-transform:uppercase;color:var(--ink-dim);margin-right:2px}
+#terrainNav button{font:inherit;font-size:10.5px;color:var(--ink);cursor:pointer;padding:5px 10px;border-radius:999px;border:1px solid var(--border-strong);background:var(--surface-2)}
+#terrainNav button:hover{border-color:var(--accent-line);background:var(--surface-3)}
+#terrainNav button.on{border-color:var(--accent);background:var(--accent-soft);color:#fff}
+.tCity{display:flex;align-items:center;gap:6px;cursor:pointer;padding:3px 9px 3px 6px;border-radius:999px;background:rgba(6,16,28,.85);border:1px solid var(--border-strong);color:var(--ink);font:600 10.5px Inter,Segoe UI,Arial,sans-serif;white-space:nowrap}
+.tCity:before{content:"";width:8px;height:8px;border-radius:50%;background:var(--accent)}
+.tCity:hover{border-color:var(--accent)}
+/* Terrain weather: animated city badges, "weather here" chip, lightning flash */
+.tCity.wx:before{display:none}
+.tCity .tt{color:var(--ink-dim);font-weight:500}
+.wxi{display:inline-block;width:16px;text-align:center;font-size:13px;position:relative}
+.wx-sun{animation:wxSpin 12s linear infinite}
+.wx-partly,.wx-cloud,.wx-fog{animation:wxDrift 3s ease-in-out infinite alternate}
+.wx-rain::after,.wx-storm::after{content:"";position:absolute;left:3px;right:3px;top:13px;height:7px;background:repeating-linear-gradient(105deg,transparent 0 2px,#7cc4fa 2px 3px);animation:wxFall .55s linear infinite}
+.wx-snow::after{content:"";position:absolute;left:1px;right:1px;top:13px;height:7px;background:radial-gradient(circle,#fff 0 1px,transparent 1.5px) 0 0/5px 5px;animation:wxFall 1.4s linear infinite}
+.wx-storm{animation:wxFlash 3.2s steps(1) infinite}
+@keyframes wxSpin{to{transform:rotate(360deg)}}
+@keyframes wxDrift{from{transform:translateX(-1.5px)}to{transform:translateX(1.5px)}}
+@keyframes wxFall{from{transform:translateY(-3px);opacity:1}to{transform:translateY(4px);opacity:0}}
+@keyframes wxFlash{0%,90%,100%{filter:none}93%{filter:brightness(2.4)}}
+#terrainNav .twx{font-size:10.5px;color:var(--ink);padding:5px 10px;border-radius:999px;border:1px solid var(--accent-line);background:var(--accent-soft);white-space:nowrap}
+#tFlash{position:absolute;inset:0;z-index:601;pointer-events:none;background:#e8f0ff;opacity:0;transition:opacity .09s;display:none}
+body.modeTerrain #tFlash{display:block}
+@media(prefers-reduced-motion:reduce){.wxi{animation:none!important}.wxi::after{animation:none!important}}
+#terrain3d .mapboxgl-ctrl-bottom-left{bottom:190px;left:286px}
+@media(max-width:1100px){#terrain3d .mapboxgl-ctrl-bottom-left{left:252px}}
+@media(max-width:1300px){.pill-info{display:none}}
+@media(max-width:1100px){#terrainNav{max-width:calc(100vw - 40px);top:auto;bottom:190px}}
+
+/* ===== Forecast window (Open-Meteo data, portal design) ===== */
+#mbModal{display:none;position:fixed;inset:0;z-index:1500;background:rgba(2,8,14,.72);backdrop-filter:blur(6px);align-items:center;justify-content:center;padding:16px}
+#mbModal.on{display:flex}
+.mbCard{width:min(1100px,96vw);max-height:94vh;overflow:auto;display:flex;flex-direction:column;gap:10px}
+.mbCities{display:flex;flex-wrap:wrap;gap:6px}
+.mbCities button{font:inherit;font-size:11px;color:var(--ink);cursor:pointer;padding:6px 12px;border-radius:999px;border:1px solid var(--border-strong);background:var(--surface-2)}
+.mbCities button:hover{border-color:var(--accent-line);background:var(--surface-3)}
+.mbCities button.on{color:#fff;border-color:var(--accent);background:var(--accent-soft)}
+.fcNow{display:grid;grid-template-columns:auto 1fr auto;gap:18px;align-items:center;padding:14px 16px;border-radius:14px;background:var(--surface-2);border:1px solid var(--border)}
+.fcBig{display:flex;align-items:center;gap:12px}
+.fcBig .ico{font-size:46px;line-height:1}
+.fcBig .t{font-size:44px;font-weight:800;color:#fff;line-height:1}
+.fcBig .t small{font-size:18px;color:var(--ink-dim);font-weight:600}
+.fcDesc b{display:block;font-size:16px;color:#fff;margin-bottom:3px}
+.fcDesc span{font-size:11.5px;color:var(--ink-dim)}
+.fcStats{display:grid;grid-template-columns:repeat(3,auto);gap:6px 18px;font-size:11px;color:var(--ink-dim)}
+.fcStats b{display:block;font-size:14px;color:var(--ink)}
+.fcDays{display:grid;grid-template-columns:repeat(7,1fr);gap:8px}
+.fcAir{display:grid;grid-template-columns:auto 1fr repeat(6,auto);gap:6px 18px;align-items:center;padding:10px 16px;border-radius:14px;background:var(--surface-2);border:1px solid var(--border);font-size:11px;color:var(--ink-dim)}
+.fcAir:empty{display:none}
+.fcAir .aqi{min-width:62px;text-align:center;padding:6px 10px;border-radius:12px;color:#04121c;font-weight:800;font-size:22px;line-height:1}
+.fcAir .aqi small{display:block;font-size:9px;font-weight:700;letter-spacing:.5px;margin-top:3px}
+.fcAir .cat b{display:block;color:#fff;font-size:13px}
+.fcAir .st b{display:block;color:var(--ink);font-size:13px}
+@media(max-width:1000px){.fcAir{grid-template-columns:auto 1fr;}}
+.fcDay{padding:10px 8px;border-radius:12px;background:var(--surface-2);border:1px solid var(--border);text-align:center;font-size:10.5px;color:var(--ink-dim)}
+.fcDay.today{border-color:var(--accent-line);background:var(--accent-soft)}
+.fcDay .d{font-size:12px;font-weight:700;color:var(--ink)}
+.fcDay .ico{font-size:28px;margin:6px 0 4px;line-height:1}
+.fcDay .hl{font-size:14px;font-weight:800;color:#fff}
+.fcDay .hl span{color:var(--ink-dim);font-weight:600}
+.fcDay .rain{margin-top:5px;color:var(--accent);font-weight:700}
+.fcDay .rain.dry{color:var(--ink-dim);font-weight:400}
+.fcDay .mini{margin-top:3px}
+.fcChartWrap{padding:10px 12px;border-radius:12px;background:var(--surface-2);border:1px solid var(--border)}
+.fcChartHead{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px}
+.fcChartHead b{font-size:11px;color:var(--accent);text-transform:uppercase;letter-spacing:.8px}
+.fcChartBox{position:relative;height:220px}
+.fcMsg{display:none;padding:30px;text-align:center;color:var(--ink-dim);font-size:12px}
+.fcMsg.on{display:block}
+.mbCredit{font-size:10px;color:var(--ink-dim);text-align:center}
+.mbCredit a{color:var(--accent);font-weight:700}
+.fcTabs{margin-left:auto;display:flex;gap:6px}
+.fcTabs button,.fcSeg button{font:inherit;font-size:11px;color:var(--ink);cursor:pointer;padding:6px 12px;border-radius:999px;border:1px solid var(--border-strong);background:var(--surface-2)}
+.fcTabs button:hover,.fcSeg button:hover{border-color:var(--accent-line);background:var(--surface-3)}
+.fcTabs button.on,.fcSeg button.on{color:#fff;border-color:var(--accent);background:var(--accent-soft)}
+.fcTabs+.aiIcon{margin-left:0}
+.fcView{display:none;flex-direction:column;gap:10px}
+.fcView.on{display:flex}
+.fcBar{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.fcBar .lbl{font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--ink-dim);width:58px}
+.fcSeg button.na{opacity:.35;cursor:not-allowed}
+.fcSeg{display:flex;gap:6px;flex-wrap:wrap}
+.pkMapWrap{position:relative;height:min(560px,58vh);border-radius:12px;overflow:hidden;border:1px solid var(--border)}
+#pkMap{position:absolute;inset:0;background:#05080f}
+.pkInfo{position:absolute;z-index:500;left:54px;top:10px;padding:6px 10px;border-radius:8px;font-size:11px;color:var(--ink);background:rgba(8,16,26,.88);border:1px solid var(--border);pointer-events:none;max-width:60%}
+.pkLegend{position:absolute;z-index:500;right:10px;bottom:10px;padding:8px 10px;border-radius:8px;font-size:10px;color:var(--ink-dim);background:rgba(8,16,26,.88);border:1px solid var(--border);pointer-events:none;min-width:230px}
+.pkLegend .bar{height:9px;border-radius:5px;margin:5px 0 3px}
+.pkLegend .ticks{display:flex;justify-content:space-between}
+.pkRank{position:absolute;z-index:500;right:10px;top:10px;padding:8px 10px;border-radius:8px;font-size:10.5px;color:var(--ink-dim);background:rgba(8,16,26,.88);border:1px solid var(--border);min-width:200px;max-width:260px}
+.pkRank:empty{display:none}
+.pkRank b{color:var(--ink)}
+.pkRank ol{margin:4px 0 0;padding-left:18px}.pkRank li{margin:2px 0}.pkRank li span{color:#fff;font-weight:700}
+.fcSearch input{width:100%;font:inherit;font-size:12px;color:var(--ink);background:rgba(0,0,0,.25);border:1px solid var(--border-strong);border-radius:10px;padding:8px 12px;outline:none}
+.fcSearch input:focus{border-color:var(--accent)}
+.pkCity{white-space:nowrap;font:700 10.5px Inter,Segoe UI,Arial,sans-serif;color:#fff;text-shadow:0 1px 3px #000,0 0 6px #000;transform:translate(-50%,-50%)}
+.pkCity small{font-weight:500;color:#cbd5e1}
+@media(max-width:1000px){.fcDays{grid-template-columns:repeat(4,1fr)}.fcNow{grid-template-columns:1fr}.fcStats{grid-template-columns:repeat(3,1fr)}}
+
+/* ===== AI assistant panel ===== */
+.aibtn{background:var(--accent);border-color:var(--accent);color:#04121c;font-weight:800}
+.aibtn.on{background:var(--accent-soft);color:#fff}
+#aiFab{position:absolute;z-index:1250;right:18px;bottom:96px;display:flex;align-items:center;gap:8px;padding:12px 18px 12px 14px;border:0;border-radius:999px;cursor:pointer;font:800 13px Inter,Segoe UI,Arial,sans-serif;color:#04121c;background:var(--accent);box-shadow:0 8px 24px rgba(0,0,0,.45),0 0 0 4px rgba(56,189,248,.18);transition:transform .2s,box-shadow .2s}
+#aiFab:hover{transform:translateY(-2px);box-shadow:0 12px 28px rgba(0,0,0,.5),0 0 0 6px rgba(56,189,248,.25)}
+#aiFab .fabIcon{font-size:17px}
+body.aiOpen #aiFab{display:none}
+@media(max-width:1100px){#aiFab .fabText{display:none}#aiFab{padding:12px}}
+.aibtn:hover{background:rgba(56,189,248,.26)}
+#aiPanel{position:absolute;z-index:1300;top:91px;right:18px;bottom:26px;width:min(400px,calc(100vw - 32px));display:flex;flex-direction:column;border-radius:20px;
+ background:rgba(8,17,28,.94);backdrop-filter:var(--glass-blur);-webkit-backdrop-filter:var(--glass-blur);border:1px solid var(--border-strong);box-shadow:var(--glass-shadow);
+ transform:translateX(calc(100% + 30px));opacity:0;pointer-events:none;transition:transform .35s cubic-bezier(.2,.8,.2,1),opacity .25s}
+#aiPanel.on{transform:none;opacity:1;pointer-events:auto}
+.aiSwitch{margin-left:auto;display:flex;padding:2px;border-radius:999px;background:rgba(0,0,0,.3);border:1px solid var(--border)}
+.aiSwitch button{font:inherit;font-size:10.5px;font-weight:700;color:var(--ink-dim);cursor:pointer;padding:4px 10px;border:0;border-radius:999px;background:none}
+.aiSwitch button.on{color:#04121c;background:var(--accent)}
+.aiSwitch+.aiIcon{margin-left:0}
+.aiWho{display:block;font-size:9px;font-weight:800;letter-spacing:.8px;text-transform:uppercase;color:var(--accent);margin-bottom:3px}
+.aiHead{display:flex;align-items:center;gap:10px;padding:14px 14px 10px;border-bottom:1px solid var(--border)}
+.aiOrb{width:32px;height:32px;border-radius:50%;display:grid;place-items:center;font-size:15px;background:linear-gradient(135deg,#0ea5e9,#1e40af)}
+.aiTitle{font-size:14px;font-weight:800;color:#fff}
+.aiSub{font-size:9.5px;color:var(--ink-dim)}
+.aiIcon{margin-left:auto;width:28px;height:28px;border-radius:50%;border:1px solid var(--border-strong);background:var(--surface-2);color:var(--ink);cursor:pointer;font-size:12px}
+.aiIcon+.aiIcon{margin-left:0}
+.aiIcon:hover{background:var(--surface-3)}
+#aiLog{flex:1;overflow-y:auto;padding:12px 14px;display:flex;flex-direction:column;gap:10px;scrollbar-width:thin;scrollbar-color:var(--border-strong) transparent}
+.aiMsg{max-width:92%;padding:9px 12px;border-radius:14px;font-size:12px;line-height:1.55;color:var(--ink);word-wrap:break-word}
+.aiMsg.user{align-self:flex-end;background:var(--accent-soft);border:1px solid var(--accent-line);border-bottom-right-radius:4px}
+.aiMsg.bot{align-self:flex-start;background:var(--surface-2);border:1px solid var(--border);border-bottom-left-radius:4px}
+.aiMsg.err{border-color:rgba(255,102,119,.6);background:rgba(255,102,119,.1)}
+.aiMsg p{margin:0 0 6px}.aiMsg p:last-child{margin:0}.aiMsg ul{margin:4px 0 6px;padding-left:18px}.aiMsg li{margin:2px 0}
+.aiMsg code{background:rgba(0,0,0,.35);padding:1px 5px;border-radius:5px;font-size:11px}
+.aiMsg b{color:#fff}
+.aiMsg.typing:after{content:"▍";animation:aiBlink 1s steps(2) infinite;color:var(--accent)}
+@keyframes aiBlink{50%{opacity:0}}
+.aiChips{display:flex;flex-wrap:wrap;gap:6px}
+.aiChips button{font:inherit;font-size:10.5px;color:var(--ink);cursor:pointer;padding:6px 10px;border-radius:999px;border:1px solid var(--border-strong);background:var(--surface-2)}
+.aiChips button:hover{border-color:var(--accent-line);background:var(--accent-soft)}
+#aiForm{display:flex;gap:8px;padding:10px 12px 12px;border-top:1px solid var(--border)}
+#aiInput{flex:1;resize:none;max-height:110px;font:inherit;font-size:12px;color:var(--ink);background:rgba(0,0,0,.25);border:1px solid var(--border-strong);border-radius:12px;padding:9px 11px;outline:none}
+#aiInput:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(56,189,248,.18)}
+#aiSend{width:40px;border-radius:12px;border:none;cursor:pointer;color:#04121c;font-size:15px;font-weight:900;background:var(--accent)}
+#aiSend:disabled{opacity:.45;cursor:default}
+</style>
+<link rel="stylesheet" href="prototypes/protoA.css">
+</head>
+<body class="proto-a">
+<div id="map"></div>
+<div id="globe3d"></div>
+<div id="terrain3d"></div>
+<div id="tFlash"></div>
+<div id="terrainNav" aria-label="Fly to"><b>Fly to</b></div>
+<div id="globeNav" aria-label="Globe view"><button type="button" onclick="globeFocusPakistan()">🎯 Focus Pakistan</button><button type="button" onclick="globeSpin()">⟳ Rotate</button><button type="button" onclick="globeWhole()">🌍 Whole globe</button></div>
+<div id="label3dWrap"></div>
+
+<div class="topbar">
+  <div class="brand">
+    <div class="brandmark">CD</div>
+    <div><div class="title">Pakistan Climate Driver Intelligence</div><div class="subtitle">National weather influence & early-warning dashboard • Prototype</div></div>
+  </div>
+  <div class="status">
+    <div class="pill pill-info"><span class="dot"></span><span class="live">SYSTEM ONLINE</span></div>
+    <button class="pill viewbtn aibtn" id="aiBtn" type="button" title="Ask the AI assistant about this portal">✨ Ask AI</button>
+    <button class="pill viewbtn mbbtn" id="mbBtn" type="button" title="Live weather map and 7-day city forecasts">🌦 Forecast</button>
+    <button class="pill viewbtn terrainbtn" id="terrainBtn" type="button" title="3D mountain terrain of Pakistan">⛰ Terrain</button>
+    <button class="pill viewbtn" id="viewBtn" type="button">🌐 3D</button>
+    <div class="pill" id="clock">--:-- PKT</div>
+  </div>
+</div>
+
+<div class="maplabel">LIVE ANALYTICAL MAP • Switch driver layers with the cards below</div>
+
+<aside class="left"><div class="leftScroll">
+  <div class="section-title">Current influence index</div>
+  <div class="driver" id="row_monsoon" title="Open the leading driver"><div class="driver-head"><span>Monsoon</span><span class="score" id="sc_monsoon">– / 100</span></div><div class="bar"><i id="bar_monsoon" style="width:0%"></i></div><div class="small" id="sub_monsoon">Waiting for data…</div></div>
+  <div class="driver" id="row_winter" title="Open the leading driver"><div class="driver-head"><span>Winter precipitation</span><span class="score" id="sc_winter">– / 100</span></div><div class="bar"><i id="bar_winter" style="width:0%"></i></div><div class="small" id="sub_winter">Waiting for data…</div></div>
+  <div class="driver" id="row_heat" title="Open the leading driver"><div class="driver-head"><span>Heat risk</span><span class="score" id="sc_heat">– / 100</span></div><div class="bar"><i id="bar_heat" style="width:0%"></i></div><div class="small" id="sub_heat">Waiting for data…</div></div>
+  <div class="driver" id="row_flood" title="Open the leading driver"><div class="driver-head"><span>Flood-supporting signal</span><span class="score" id="sc_flood">– / 100</span></div><div class="bar"><i id="bar_flood" style="width:0%"></i></div><div class="small" id="sub_flood">Waiting for data…</div></div>
+  <div class="stamp">50 = normal. Scores weight each driver's latest anomaly against its 1991–2020 climate. Click a row to open its leading driver.</div>
+</div></aside>
+
+<aside class="right">
+  <div class="card">
+    <h3>Driver influence trend</h3><div class="muted" style="margin-bottom:6px">Monthly scores from observed anomalies · click legend to toggle</div>
+    <div class="chartbox"><canvas id="trend"></canvas></div>
+  </div>
+
+  <div class="card">
+    <h3>Current contribution to signal</h3><div class="muted" style="margin-bottom:6px">Share of current anomaly strength · click a slice to open</div>
+    <div class="piebox"><canvas id="pie"></canvas></div>
+  </div>
+
+  <div class="card">
+    <h3>Forecast horizon</h3>
+    <div class="grid2">
+      <div class="kpi horizon" data-drivers="jet,wd,mjo" title="Open the lead driver"><div class="muted">0–10 days</div><b>Synoptic</b><div class="small">Jet + WD + MJO</div><div class="hstat"></div></div>
+      <div class="kpi horizon" data-drivers="mjo,sst,enso" title="Open the lead driver"><div class="muted">10–45 days</div><b>Subseasonal</b><div class="small">MJO + SST + ENSO</div><div class="hstat"></div></div>
+      <div class="kpi horizon" data-drivers="enso,iod,sst" title="Open the lead driver"><div class="muted">1–3 months</div><b>Seasonal</b><div class="small">ENSO + IOD + SST</div><div class="hstat"></div></div>
+      <div class="kpi horizon" data-drivers="enso,ao,nao,snow" title="Open the lead driver"><div class="muted">3–12 months</div><b>Climate</b><div class="small">ENSO + AO + NAO + Snow</div><div class="hstat"></div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3 id="activeTitle">Active layer: ENSO</h3>
+    <div class="small" id="activeText">Illustrative operational layer. Replace with live NOAA/CPC/BoM/ECMWF data feeds for production use.</div>
+    <div class="srcrow">
+      <a class="srclink" id="srcNull" href="https://earth.nullschool.net/#current/ocean/surface/currents/overlay=sea_surface_temp_anomaly/orthographic=69.17,-0.40,523" target="_blank" rel="noopener">🌍 earth.nullschool ↗</a>
+    </div>
+    <div class="livesrc" id="liveSrc">LIVE TILES: NASA GIBS — GHRSST MUR sea-surface temp anomaly</div>
+    <div class="legend" style="margin-top:8px"><span style="color:#38bdf8">Ocean</span><span style="color:#a78bfa">Circulation</span><span style="color:#fbbf24">Land &amp; snow</span><span style="color:#34d399">Teleconnections</span></div>
+  </div>
+</aside>
+
+<div class="bottombar"><div class="bbtrack">
+  <button class="layer active" data-layer="enso"><span class="icon">🌊</span><span class="layername">ENSO</span><span class="toggle"></span></button>
+  <button class="layer" data-layer="iod"><span class="icon">◐</span><span class="layername">Indian Ocean Dipole</span><span class="toggle"></span></button>
+  <button class="layer" data-layer="mjo"><span class="icon">➤</span><span class="layername">MJO convection</span><span class="toggle"></span></button>
+  <button class="layer" data-layer="sst"><span class="icon">🌡</span><span class="layername">Arabian Sea SST</span><span class="toggle"></span></button>
+  <button class="layer" data-layer="bengal"><span class="icon">≈</span><span class="layername">Bay of Bengal</span><span class="toggle"></span></button>
+  <button class="layer" data-layer="wd"><span class="icon">✦</span><span class="layername">Western disturbances</span><span class="toggle"></span></button>
+  <button class="layer" data-layer="jet"><span class="icon">〰</span><span class="layername">Jet stream</span><span class="toggle"></span></button>
+  <button class="layer" data-layer="tibet"><span class="icon">▲</span><span class="layername">Tibetan Plateau</span><span class="toggle"></span></button>
+  <button class="layer" data-layer="ao"><span class="icon">A</span><span class="layername">Arctic Oscillation</span><span class="toggle"></span></button>
+  <button class="layer" data-layer="nao"><span class="icon">N</span><span class="layername">North Atlantic</span><span class="toggle"></span></button>
+  <button class="layer" data-layer="snow"><span class="icon">❄</span><span class="layername">Eurasian snow</span><span class="toggle"></span></button>
+</div></div>
+<div id="toast"></div>
+
+<div id="mbModal" role="dialog" aria-label="Weather forecast">
+ <div class="dvmCard mbCard">
+  <div class="dvmHead">
+   <span class="dvmChip" style="background:#38bdf8;color:#38bdf8"></span>
+   <div><div class="dvmTitle" id="fcTitle">Weather forecast</div><div class="dvmSub" id="fcSub">Whole Pakistan · 7 days</div></div>
+   <div class="fcTabs"><button type="button" data-view="map" class="on">🗺 Pakistan map</button><button type="button" data-view="city">📍 City / point forecast</button></div>
+   <button id="mbClose" class="aiIcon" type="button" title="Close">✕</button>
+  </div>
+  <div class="fcView on" data-view="map">
+   <div class="fcBar"><span class="lbl">Day</span><div class="fcSeg" id="pkDays"></div></div>
+   <div class="fcBar"><span class="lbl">Weather</span><div class="fcSeg" id="pkVars"></div></div>
+   <div class="fcBar"><span class="lbl">Air</span><div class="fcSeg" id="pkAqVars"></div></div>
+   <div class="pkMapWrap"><div id="pkMap"></div><div class="pkRank" id="pkRank"></div><div class="pkInfo" id="pkInfo">Hover for values · click anywhere for that spot's full forecast</div><div class="pkLegend" id="pkLegend"></div></div>
+   <div class="fcMsg" id="pkMsg"></div>
+  </div>
+  <div class="fcView" data-view="city">
+  <div class="fcSearch"><input id="fcDistrict" list="fcDistrictList" placeholder="🔎 Search any of Pakistan's 167 districts…" autocomplete="off"><datalist id="fcDistrictList"></datalist></div>
+  <div class="mbCities" id="mbCities"></div>
+  <div class="fcMsg" id="fcMsg"></div>
+  <div id="fcBody">
+   <div class="fcNow" id="fcNow"></div>
+   <div class="fcAir" id="fcAir"></div>
+   <div class="fcDays" id="fcDays"></div>
+   <div class="fcChartWrap">
+    <div class="fcChartHead"><b>Next 48 hours</b><span class="muted">temperature · chance of rain · wind</span></div>
+    <div class="fcChartBox"><canvas id="fcChart"></canvas></div>
+   </div>
+  </div>
+  </div>
+  <div class="mbCredit">Weather data: <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a> · air quality: Copernicus CAMS · model forecasts, not official warnings (see PMD for alerts) · <span id="fcUpdated"></span></div>
+ </div>
+</div>
+
+<button id="aiFab" type="button" title="Ask the AI assistant about this portal" aria-label="Open the AI assistant"><span class="fabIcon">✨</span><span class="fabText">Ask AI</span></button>
+
+<section id="aiPanel" aria-label="AI assistant" aria-hidden="true">
+ <div class="aiHead">
+  <span class="aiOrb">✨</span>
+  <div><div class="aiTitle">Portal assistant</div><div class="aiSub" id="aiSub">Answers from this portal's data · Claude</div></div>
+  <div class="aiSwitch" role="radiogroup" aria-label="Choose the AI"><button type="button" data-provider="grok" role="radio" title="Grok (xAI). Free through Puter unless an xAI key is set on the server">Grok</button><button type="button" data-provider="claude" role="radio" title="Claude (Anthropic). Free through Puter unless a Claude key is set on the server">Claude</button></div>
+  <button id="aiClear" class="aiIcon" type="button" title="New conversation">↺</button>
+  <button id="aiClose" class="aiIcon" type="button" title="Close">✕</button>
+ </div>
+ <div id="aiLog" aria-live="polite">
+  <div class="aiMsg bot">Hi! Ask me anything about this portal — what a score means, why a driver is high, or how the data is calculated.</div>
+  <div class="aiChips">
+   <button type="button">Why is Winter precipitation so high?</button>
+   <button type="button">Is it El Niño or La Niña right now?</button>
+   <button type="button">Explain the western disturbance data</button>
+   <button type="button">How are the scores calculated?</button>
+  </div>
+ </div>
+ <form id="aiForm" autocomplete="off">
+  <textarea id="aiInput" rows="1" placeholder="Ask about the portal… (English or Urdu)" aria-label="Your question"></textarea>
+  <button id="aiSend" type="submit" title="Send">➤</button>
+ </form>
+</section>
+
+<div id="drvModal">
+ <div class="dvmCard">
+  <div class="dvmHead">
+   <span class="dvmChip" id="dvmChip"></span>
+   <div><div class="dvmTitle" id="dvmTitle"></div><div class="dvmSub">Driver analysis · latest observed data</div></div>
+   <button id="dvmClose" title="Close">✕</button>
+  </div>
+  <div class="dvmBody">
+   <div class="dvmGlobeWrap">
+    <div class="dvmGlobe" id="dvmGlobe"><div id="dvmLbls"></div></div>
+    <div class="dvmCap">Esri World Imagery · drag to rotate</div>
+   </div>
+   <div class="dvmRight">
+    <div class="dvmKpis">
+     <div class="dvmKpi"><div class="k">Latest</div><div class="v" id="kLatest">–</div><div class="s" id="kLatestS"></div></div>
+     <div class="dvmKpi"><div class="k" id="kChangeK">Change</div><div class="v" id="kChange">–</div><div class="s" id="kChangeS"></div></div>
+     <div class="dvmKpi"><div class="k">Data through</div><div class="v" id="kThrough">–</div><div class="s" id="kSource"></div></div>
+    </div>
+    <div class="dvmPanel">
+     <div class="dvmChartHead"><b id="dvmChartTitle"></b><a id="dvmSrcLink" href="#" target="_blank" rel="noopener"></a></div>
+     <div class="dvmChartBox"><canvas id="dvmChart"></canvas><div class="dvmEmpty" id="dvmEmpty"></div></div>
+    </div>
+   </div>
+  </div>
+  <div class="dvmDesc" id="dvmDesc"></div>
+  <div class="dvmLinks">
+   <a id="dvmNull" href="#" target="_blank" rel="noopener">earth.nullschool.net ↗</a>
+   <a id="dvmNull2" href="#" target="_blank" rel="noopener">jet stream ↗</a>
+   <span id="dvmLive"></span>
+  </div>
+ </div>
+</div>
+
+<script>
+const map = L.map('map',{zoomControl:false,attributionControl:true,minZoom:2,worldCopyJump:true}).setView([30.3,69.3],4.2);
+L.control.zoom({position:'bottomright'}).addTo(map);
+// Pane order (bottom to top): dark basemap 150 -> coloured regions 180 -> live NASA GIBS tiles (tilePane 200) -> markers.
+// The live data tiles therefore draw over the colours, so SST anomalies etc. stay readable.
+map.createPane('basemap').style.zIndex=150;
+map.createPane('regions').style.zIndex=180;
+map.getPane('regions').style.pointerEvents='none';
+// Public Mapbox token (pk.*): restrict it to this site's URL in the Mapbox account so others can't reuse it.
+const MAPBOX_TOKEN='pk.eyJ1IjoiemVlc2hhbjEwIiwiYSI6ImNtMXN0YXVhbTBhYnIybHNhOHRheHRwOWoifQ.vgmSlaE3lAnZPy59Ni7SkQ';
+const base=L.tileLayer('https://api.mapbox.com/styles/v1/mapbox/dark-v11/tiles/512/{z}/{x}/{y}@2x?access_token='+MAPBOX_TOKEN,
+ {pane:'basemap',tileSize:512,zoomOffset:-1,maxZoom:12,attribution:'&copy; <a href="https://www.mapbox.com/about/maps/" target="_blank" rel="noopener">Mapbox</a> &copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> <a href="https://www.mapbox.com/map-feedback/" target="_blank" rel="noopener"><b>Improve this map</b></a>'}).addTo(map);
+let tileErrors=0;
+base.on('tileerror',()=>{
+ if(++tileErrors===6){ // Mapbox unreachable or token rejected: fall back to Esri's dark canvas
+  map.removeLayer(base);
+  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}',{pane:'basemap',maxZoom:10,attribution:'&copy; Esri'}).addTo(map);
+ }
+});
+
+const ACCENT='#38bdf8';
+// Four driver groups, one colour each (bottom bar, map markers, driver cards, contribution chart, key)
+const GROUP_COLOR={ocean:'#38bdf8',circulation:'#a78bfa',land:'#fbbf24',remote:'#34d399'};
+const DRIVER_GROUP={enso:'ocean',iod:'ocean',sst:'ocean',bengal:'ocean',mjo:'circulation',wd:'circulation',jet:'circulation',tibet:'land',snow:'land',ao:'remote',nao:'remote'};
+// Country borders: neighbours from Natural Earth (lib/countries.js) as neutral lines; Pakistan from the
+// official National_Boundary shapefile (lib/pak_boundary.js), with the disputed Jammu & Kashmir region dashed.
+const HAS_PAK_BOUNDARY=typeof PAK_BOUNDARY!=='undefined';
+if(typeof COUNTRIES!=='undefined'){
+ L.geoJSON(COUNTRIES,{pane:'regions',interactive:false,
+  filter:f=>!(HAS_PAK_BOUNDARY&&f.properties.i==='PAK'),
+  style:f=>f.properties.i==='PAK'
+   ?{color:ACCENT,weight:2,opacity:1,fillColor:ACCENT,fillOpacity:.1,className:'cty cty-pk'}
+   :{color:'#94a3b8',weight:.7,opacity:.4,fill:false,className:'cty'}
+ }).addTo(map);
+}
+if(HAS_PAK_BOUNDARY){
+ map.createPane('pakBoundary').style.zIndex=410; // above live data tiles (200) and overlays (400), below markers (600)
+ L.geoJSON(PAK_BOUNDARY,{pane:'pakBoundary',
+  style:f=>f.properties.disputed
+   ?{color:ACCENT,weight:1.6,opacity:.95,dashArray:'6 5',fillColor:ACCENT,fillOpacity:.05}
+   :{color:ACCENT,weight:2,opacity:1,fillColor:ACCENT,fillOpacity:.1,className:'cty-pk'},
+  onEachFeature:(f,l)=>l.bindTooltip(f.properties.name,{sticky:true,className:'pkTip'})
+ }).addTo(map);
+}
+// ---- Districts (Pakistan_Districts.geojson -> lib/districts.js): outlines, lookup, district averages ----
+const HAS_DISTRICTS=typeof DISTRICTS!=='undefined';
+function inRing(x,y,r){let c=false;for(let i=0,j=r.length-1;i<r.length;j=i++){const [xi,yi]=r[i],[xj,yj]=r[j];if((yi>y)!==(yj>y)&&x<(xj-xi)*(y-yi)/(yj-yi)+xi)c=!c;}return c;}
+function inDistrict(x,y,f){const b=f.bb;if(x<b[0]||x>b[2]||y<b[1]||y>b[3])return false;return f.geometry.coordinates.some(poly=>inRing(x,y,poly[0])&&!poly.slice(1).some(h=>inRing(x,y,h)));}
+function districtAt(lat,lon){return HAS_DISTRICTS?DISTRICTS.features.find(f=>inDistrict(lon,lat,f)):null;}
+if(HAS_DISTRICTS)DISTRICTS.features.forEach(f=>{ // bounding box + sample points used for district averages
+ const xs=[],ys=[];f.geometry.coordinates.forEach(p=>p[0].forEach(([x,y])=>{xs.push(x);ys.push(y);}));
+ f.bb=[Math.min(...xs),Math.min(...ys),Math.max(...xs),Math.max(...ys)];
+ const step=Math.min(.2,Math.max(.04,Math.min(f.bb[2]-f.bb[0],f.bb[3]-f.bb[1])/6));f.samples=[];
+ for(let y=f.bb[1]+step/2;y<f.bb[3];y+=step)for(let x=f.bb[0]+step/2;x<f.bb[2];x+=step)if(inDistrict(x,y,f))f.samples.push([y,x]);
+ if(!f.samples.length)f.samples.push([f.properties.c[1],f.properties.c[0]]);
+});
+if(HAS_DISTRICTS){ // main map: district outlines once zoomed in
+ const dl=L.geoJSON(DISTRICTS,{pane:'pakBoundary',interactive:false,style:f=>({color:'#cbd5e1',weight:.7,opacity:.5,fill:false,dashArray:f.properties.disputed?'4 4':null})});
+ const sync=()=>{if(map.getZoom()>=6)dl.addTo(map);else dl.remove();};
+ map.on('zoomend',sync);sync();
+ map.on('mousemove',e=>{const d=map.getZoom()>=6&&districtAt(e.latlng.lat,e.latlng.lng);map.getContainer().title=d?d.properties.n+' district · '+d.properties.p:'';});
+}
+
+const layers={};
+const pts3d={};
+function makeLayer(name, color, points, opts={}){
+  pts3d[name]={color,points,pop:opts.popup||name};
+  const g=L.layerGroup();
+  points.forEach(p=>{
+    const c=L.circleMarker(p,{radius:opts.radius||7,color,fillColor:color,fillOpacity:.65,weight:1.2});
+    if(opts.popup)c.bindPopup(opts.popup);
+    c.addTo(g);
+  });
+  layers[name]=g; return g;
+}
+makeLayer('enso',GROUP_COLOR[DRIVER_GROUP.enso],[[0,160],[10,175],[0,140],[-10,170]],{radius:9,popup:'ENSO signal zone'});
+makeLayer('iod',GROUP_COLOR[DRIVER_GROUP.iod],[[-5,50],[0,60],[5,70],[10,80]],{radius:8,popup:'Indian Ocean Dipole signal'});
+makeLayer('mjo',GROUP_COLOR[DRIVER_GROUP.mjo],[[-5,70],[0,85],[5,100],[10,115]],{radius:7,popup:'MJO convection pathway'});
+makeLayer('sst',GROUP_COLOR[DRIVER_GROUP.sst],[[23,59],[20,62],[17,65],[14,68]],{radius:9,popup:'Arabian Sea SST anomaly zone'});
+makeLayer('bengal',GROUP_COLOR[DRIVER_GROUP.bengal],[[15,88],[18,90],[21,91],[24,90]],{radius:8,popup:'Bay of Bengal moisture source'});
+makeLayer('wd',GROUP_COLOR[DRIVER_GROUP.wd],[[38,30],[36,38],[34,46],[32,54],[30,61]],{radius:7,popup:'Western disturbance track'});
+makeLayer('jet',GROUP_COLOR[DRIVER_GROUP.jet],[[42,20],[40,30],[38,40],[36,50],[34,60],[32,70]],{radius:5,popup:'Jet stream corridor'});
+makeLayer('tibet',GROUP_COLOR[DRIVER_GROUP.tibet],[[30,84],[32,87],[34,90],[36,93]],{radius:8,popup:'Tibetan Plateau heating'});
+makeLayer('ao',GROUP_COLOR[DRIVER_GROUP.ao],[[60,0],[55,30],[58,60],[62,90]],{radius:7,popup:'Arctic Oscillation influence'});
+makeLayer('nao',GROUP_COLOR[DRIVER_GROUP.nao],[[55,-20],[50,0],[48,20],[45,40]],{radius:7,popup:'North Atlantic circulation'});
+makeLayer('snow',GROUP_COLOR[DRIVER_GROUP.snow],[[50,50],[55,70],[58,90],[52,110]],{radius:8,popup:'Eurasian snow cover signal'});
+
+let active='enso';
+layers[active].addTo(map);
+
+const NS='https://earth.nullschool.net/#';
+const sources={
+ enso:{gibs:['GHRSST_L4_MUR_Sea_Surface_Temperature_Anomalies','png',7],label:'GHRSST MUR sea-surface temp anomaly',url:NS+'current/ocean/surface/currents/overlay=sea_surface_temp_anomaly/orthographic=69.17,-0.40,523'},
+ iod:{gibs:['GHRSST_L4_MUR_Sea_Surface_Temperature_Anomalies','png',7],label:'GHRSST MUR SST anomaly — Indian Ocean',url:NS+'current/ocean/surface/currents/overlay=sea_surface_temp_anomaly/orthographic=75,-10,350'},
+ mjo:{gibs:['IMERG_Precipitation_Rate','png',6],label:'GPM IMERG precipitation rate',url:NS+'current/wind/surface/level/orthographic=85,0,350'},
+ sst:{gibs:['GHRSST_L4_MUR_Sea_Surface_Temperature','png',7],label:'GHRSST MUR sea-surface temperature',url:NS+'current/ocean/surface/currents/overlay=sea_surface_temp/orthographic=62,15,350'},
+ bengal:{gibs:['GHRSST_L4_MUR_Sea_Surface_Temperature','png',7],label:'GHRSST MUR sea-surface temperature',url:NS+'current/ocean/surface/currents/overlay=sea_surface_temp/orthographic=88,15,350'},
+ wd:{wind:500,label:'GFS 500 hPa wind (western disturbances) — as on earth.nullschool',url:NS+'current/wind/isobaric/500hPa/orthographic=-288.72,7.69,561'},
+ jet:{wind:250,label:'GFS 250 hPa wind (jet stream) — as on earth.nullschool',url:NS+'current/wind/isobaric/250hPa/orthographic=-288.72,7.69,561'},
+ tibet:{gibs:['VIIRS_NOAA20_NDVI_8Day','png',8],label:'VIIRS NOAA-20 NDVI (land heating)',url:NS+'current/wind/surface/level/orthographic=90,32,350'},
+ ao:{gibs:['MODIS_Terra_CorrectedReflectance_TrueColor','jpeg',9],label:'MODIS Terra true color',url:NS+'current/wind/surface/level/orthographic=0,85,400'},
+ nao:{gibs:['MODIS_Terra_CorrectedReflectance_TrueColor','jpeg',9],label:'MODIS Terra true color',url:NS+'current/wind/surface/level/orthographic=-30,50,350'},
+ snow:{gibs:['MODIS_Terra_L3_NDSI_Snow_Cover_Daily','png',8],label:'MODIS Terra NDSI snow cover',url:NS+'current/wind/surface/level/orthographic=70,50,350'}
+};
+let liveLayer=null;
+function applyLive(key){
+ if(liveLayer){map.removeLayer(liveLayer);liveLayer=null;}
+ const s=sources[key]; if(!s)return;
+ document.getElementById('srcNull').href=s.url;
+ if(s.wind){
+  startWind(s.wind);
+  document.getElementById('liveSrc').textContent='LIVE LAYER: '+s.label;
+  return;
+ }
+ stopWind();
+ const [id,ext,lvl]=s.gibs;
+ liveLayer=L.tileLayer('https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/'+id+'/default/GoogleMapsCompatible_Level'+lvl+'/{z}/{y}/{x}.'+ext,
+  {maxZoom:lvl,opacity:.65,attribution:'Live data: <a href="https://gibs.earthdata.nasa.gov" target="_blank" rel="noopener">NASA GIBS</a>'});
+  // NASA GIBS occasionally answers with a temporary 500: retry a failed tile up to twice.
+  liveLayer.on('tileerror',e=>{const t=e.tile,n=+(t.dataset.retry||0);
+   if(n<2){t.dataset.retry=n+1;setTimeout(()=>{t.src=t.src.split('?')[0]+'?retry='+(n+1);},800*(n+1));}});
+  liveLayer.addTo(map);
+  liveLayer.setZIndex(1);
+ document.getElementById('liveSrc').textContent='LIVE TILES: NASA GIBS — '+s.label;
+}
+
+// Animated upper-level wind layer (GFS via Open-Meteo, the same model earth.nullschool draws)
+// Global 7.5° grid (75°S-75°N, all longitudes). The server sends its grid with the data and fetchWind adopts it.
+let WG={lat0:-75,lon0:-180,step:7.5,ny:21,nx:48};
+let windData=null,windReq=null,windRegion=null; // windRegion: finer grid over the western-disturbance corridor, if the server has it
+const wind={level:null,parts:[],raf:0,w:0,h:0};
+const windField=document.createElement('canvas'),windCv=document.createElement('canvas');
+windField.className=windCv.className='windcv';
+map.getContainer().appendChild(windField);map.getContainer().appendChild(windCv);
+// Daily cache: one successful Open-Meteo call per calendar day per browser; a failed call is retried after WIND_RETRY_MS.
+let windDay=null;
+const WIND_RETRY_MS=15*60000;
+function readWindCache(){try{return JSON.parse(localStorage.getItem('pkWindDaily2')||'null')||{};}catch(e){return {};}}
+function writeWindCache(c){try{localStorage.setItem('pkWindDaily2',JSON.stringify(c));}catch(e){}}
+// Prefer the portal server's shared cache (one Open-Meteo call every few hours for everyone);
+// fall back to calling Open-Meteo from this browser only when the page is served without portal_server.py.
+function fetchWind(){
+ if(windData)return Promise.resolve(windData);
+ if(windReq)return windReq;
+ windReq=fetch('/api/wind').then(r=>{
+   if(r.status===503)return r.json().then(js=>{throw new Error(js.error||'wind unavailable');});
+   if(!r.ok||!(r.headers.get('content-type')||'').includes('json'))return null;
+   return r.json();
+  },()=>null).then(js=>{
+   if(!js){windReq=null;return fetchWindDirect();}
+   if(js.grid)WG=js.grid;
+   windData=js.d;windRegion=js.region||null;const ft=new Date(js.fetched.replace(' UTC','Z').replace(' ','T'));windDay=(isNaN(ft)?js.fetched:ft.toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',timeZone:'UTC'})+' UTC')+(js.stale?' (latest available)':'');
+   return windData;
+  });
+ windReq.catch(()=>{windReq=null;});
+ return windReq;
+}
+function fetchWindDirect(){
+ if(windReq)return windReq;
+ const today=new Date().toLocaleDateString('en-CA'),c=readWindCache();
+ const useCache=()=>{if(c.d){windData=c.d;windDay=c.day;return windData;}throw new Error('no wind data cached');};
+ if(c.d&&c.day===today)return Promise.resolve(useCache());
+ if(Date.now()-c.tried<WIND_RETRY_MS){windReq=Promise.resolve().then(useCache);windReq.catch(()=>{windReq=null;});return windReq;}
+ writeWindCache({day:c.day,d:c.d,tried:Date.now()});
+ const urls=[];
+ for(let j0=0;j0<WG.ny;j0+=3){const la=[],lo=[];for(let j=j0;j<Math.min(j0+3,WG.ny);j++)for(let i=0;i<WG.nx;i++){la.push(WG.lat0+j*WG.step);lo.push(WG.lon0+i*WG.step);}
+  urls.push('https://api.open-meteo.com/v1/gfs?latitude='+la.join(',')+'&longitude='+lo.join(',')+'&current=wind_speed_250hPa,wind_direction_250hPa,wind_speed_500hPa,wind_direction_500hPa&wind_speed_unit=ms');}
+ windReq=Promise.all(urls.map(u=>fetch(u).then(r=>{if(!r.ok)throw new Error(r.status);return r.json();}))).then(parts=>{
+  const arr=parts.flatMap(js=>Array.isArray(js)?js:[js]),d={250:{u:[],v:[]},500:{u:[],v:[]}};
+  arr.forEach(o=>{const c=o.current||{};[250,500].forEach(lv=>{const s=c['wind_speed_'+lv+'hPa']||0,a=(c['wind_direction_'+lv+'hPa']||0)*Math.PI/180;d[lv].u.push(-s*Math.sin(a));d[lv].v.push(-s*Math.cos(a));});});
+  windData=d;windDay=today;
+  writeWindCache({day:today,d,tried:Date.now()});
+  return d;
+ }).catch(useCache);
+ windReq.catch(()=>{windReq=null;});
+ return windReq;
+}
+function windGridAt(G,g,lat,lon){ // bilinear u,v from one grid (no wrap); null outside
+ const fx=(lon-G.lon0)/G.step,fy=(lat-G.lat0)/G.step;if(fx<0||fy<0||fx>G.nx-1||fy>G.ny-1)return null;
+ const x0=Math.min(Math.floor(fx),G.nx-2),y0=Math.min(Math.floor(fy),G.ny-2),tx=fx-x0,ty=fy-y0,k=(y,x)=>y*G.nx+x;
+ const bl=A=>(A[k(y0,x0)]*(1-tx)+A[k(y0,x0+1)]*tx)*(1-ty)+(A[k(y0+1,x0)]*(1-tx)+A[k(y0+1,x0+1)]*tx)*ty;
+ return {w:[bl(g.u),bl(g.v)],edge:Math.min(fx,fy,G.nx-1-fx,G.ny-1-fy)};
+}
+function windAt(lat,lon,level){
+ const lv=level||wind.level,g=windData&&windData[lv];if(!g)return null;
+ // longitudes wrap around the globe; latitudes beyond the grid reuse its edge rows
+ const span=WG.nx*WG.step,fx=((((lon-WG.lon0)%span)+span)%span)/WG.step;
+ const fy=Math.max(0,Math.min(WG.ny-1,(lat-WG.lat0)/WG.step));
+ const x0=Math.floor(fx)%WG.nx,x1=(x0+1)%WG.nx,y0=Math.min(Math.floor(fy),WG.ny-2),tx=fx-Math.floor(fx),ty=fy-y0;
+ const k=(y,x)=>y*WG.nx+x,a=k(y0,x0),b=k(y0,x1),c=k(y0+1,x0),e=k(y0+1,x1);
+ const bl=A=>(A[a]*(1-tx)+A[b]*tx)*(1-ty)+(A[c]*(1-tx)+A[e]*tx)*ty;
+ const glob=[bl(g.u),bl(g.v)];
+ // finer 2.5° grid along the western-disturbance corridor, blended into the global one over its outer cell
+ const R=windRegion&&windRegion.d[lv]&&windGridAt(windRegion.grid,windRegion.d[lv],lat,lon);
+ if(!R)return glob;
+ const t=Math.min(1,R.edge);return [glob[0]+(R.w[0]-glob[0])*t,glob[1]+(R.w[1]-glob[1])*t];
+}
+const WIND_RAMP=[[0,[20,40,110]],[.2,[30,120,190]],[.4,[40,190,170]],[.6,[150,210,70]],[.75,[250,200,50]],[.9,[240,90,60]],[1,[200,50,160]]];
+function windColor(s,level){
+ const t=Math.min(1,s/((level||wind.level)==250?80:50));
+ for(let i=1;i<WIND_RAMP.length;i++)if(t<=WIND_RAMP[i][0]){
+  const [t0,c0]=WIND_RAMP[i-1],[t1,c1]=WIND_RAMP[i],f=(t-t0)/(t1-t0);
+  return c0.map((v,j)=>Math.round(v+(c1[j]-v)*f));
+ }
+ return WIND_RAMP[WIND_RAMP.length-1][1];
+}
+function drawWindField(){
+ // One pixel per 8x8 block on a small canvas, then scaled up with smoothing so the colours blend.
+ const B=8,sw=Math.ceil(wind.w/B),sh=Math.ceil(wind.h/B);
+ const small=document.createElement('canvas');small.width=sw;small.height=sh;
+ const sc=small.getContext('2d'),img=sc.createImageData(sw,sh),px=img.data;
+ for(let j=0;j<sh;j++)for(let i=0;i<sw;i++){
+  const ll=map.containerPointToLatLng([i*B+B/2,j*B+B/2]),w=windAt(ll.lat,ll.lng);if(!w)continue;
+  const c=windColor(Math.hypot(w[0],w[1])),o=(j*sw+i)*4;
+  px[o]=c[0];px[o+1]=c[1];px[o+2]=c[2];px[o+3]=128;
+ }
+ sc.putImageData(img,0,0);
+ const fx=windField.getContext('2d');fx.clearRect(0,0,wind.w,wind.h);
+ fx.imageSmoothingEnabled=true;fx.imageSmoothingQuality='high';
+ fx.drawImage(small,0,0,sw*B,sh*B);
+}
+function spawn(p){p.x=Math.random()*wind.w;p.y=Math.random()*wind.h;p.age=Math.random()*90|0;return p;}
+function resetWind(){
+ if(!wind.level||!windData)return;
+ const sz=map.getSize();wind.w=sz.x;wind.h=sz.y;
+ windField.width=windCv.width=wind.w;windField.height=windCv.height=wind.h;
+ drawWindField();
+ const n=Math.min(4000,(wind.w*wind.h/450)|0);
+ wind.parts=[];for(let i=0;i<n;i++)wind.parts.push(spawn({}));
+}
+function windFrame(){
+ wind.raf=requestAnimationFrame(windFrame);
+ if(mode3d||terrainOn||wind.moving||!wind.parts.length)return;
+ const ctx=windCv.getContext('2d');
+ ctx.globalCompositeOperation='destination-in';ctx.fillStyle='rgba(0,0,0,.93)';ctx.fillRect(0,0,wind.w,wind.h);
+ ctx.globalCompositeOperation='source-over';
+ ctx.strokeStyle='rgba(255,255,255,.85)';ctx.lineWidth=1.1;ctx.beginPath();
+ const k=wind.level===250?.045:.07;
+ wind.parts.forEach(p=>{
+  const ll=map.containerPointToLatLng([p.x,p.y]),w=windAt(ll.lat,ll.lng);
+  if(!w||++p.age>110){spawn(p);p.age=0;return;}
+  const nx=p.x+w[0]*k,ny=p.y-w[1]*k;
+  ctx.moveTo(p.x,p.y);ctx.lineTo(nx,ny);p.x=nx;p.y=ny;
+ });
+ ctx.stroke();
+}
+function startWind(level){
+ wind.level=level;wind.parts=[];
+ windCv.getContext('2d').clearRect(0,0,windCv.width,windCv.height);
+ windField.classList.add('on');windCv.classList.add('on');
+ fetchWind().then(()=>{
+   if(wind.level!==level)return;
+   const ls=document.getElementById('liveSrc');ls.textContent=ls.textContent.replace(/ · data .*$/,'')+' · data '+windDay;
+   resetWind();if(!wind.raf)windFrame();
+  })
+  .catch(()=>{if(wind.level===level)toast('Wind data unavailable right now — try again later');});
+}
+function stopWind(){
+ wind.level=null;wind.parts=[];
+ if(wind.raf){cancelAnimationFrame(wind.raf);wind.raf=0;}
+ windField.classList.remove('on');windCv.classList.remove('on');
+}
+map.on('movestart zoomstart',()=>{if(!wind.level)return;wind.moving=true;windCv.getContext('2d').clearRect(0,0,wind.w,wind.h);windField.getContext('2d').clearRect(0,0,wind.w,wind.h);});
+map.on('moveend zoomend resize',()=>{wind.moving=false;resetWind();});
+applyLive('enso');
+
+let mode3d=false,t3=null,drag3=null;
+function latLonToV3(lat,lon,r){const p=(90-lat)*Math.PI/180,t=(lon+180)*Math.PI/180;return new THREE.Vector3(-r*Math.sin(p)*Math.cos(t),r*Math.cos(p),r*Math.sin(p)*Math.sin(t));}
+function clearGroup3(g){while(g.children.length){const c=g.children.pop();g.remove(c);if(c.isSprite){if(c.material)c.material.dispose();}else if(c.geometry)c.geometry.dispose();}}
+function clearLabels3(){if(!t3)return;t3.labels.forEach(l=>l.el.remove());t3.labels.length=0;}
+function addLabel3(v3,text,hub){const el=document.createElement('div');el.className='lbl3d'+(hub?' hub':'');el.textContent=text;t3.wrap.appendChild(el);t3.labels.push({el,v:v3.clone()});}
+let glowTex=null;
+function makeGlowTex(){
+ const c=document.createElement('canvas');c.width=c.height=64;
+ const x=c.getContext('2d');
+ const g=x.createRadialGradient(32,32,0,32,32,32);
+ g.addColorStop(0,'rgba(255,255,255,1)');g.addColorStop(.25,'rgba(255,255,255,.5)');g.addColorStop(1,'rgba(255,255,255,0)');
+ x.fillStyle=g;x.fillRect(0,0,64,64);
+ return new THREE.CanvasTexture(c);
+}
+function addGlow3(pos,size,color,op){
+ if(!glowTex)glowTex=makeGlowTex();
+ const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:glowTex,color,transparent:true,opacity:op,blending:THREE.AdditiveBlending,depthWrite:false}));
+ sp.position.copy(pos);sp.scale.set(size,size,1);
+ t3.markers.add(sp);
+ return sp;
+}
+function buildDriver3(key){
+ if(!t3)return;
+ clearGroup3(t3.markers);clearLabels3();t3.hubGlow=null;
+ const d=pts3d[key];if(!d)return;
+ const col=new THREE.Color(d.color);
+ const hub=latLonToV3(30.3,69.3,1.012);
+ const hubM=new THREE.Mesh(new THREE.SphereGeometry(.024,16,16),new THREE.MeshBasicMaterial({color:0x4ee59b}));hubM.position.copy(hub);t3.markers.add(hubM);
+ const ring=new THREE.Mesh(new THREE.RingGeometry(.034,.042,32),new THREE.MeshBasicMaterial({color:0x4ee59b,transparent:true,opacity:.7,side:THREE.DoubleSide}));ring.position.copy(hub);ring.lookAt(0,0,0);t3.markers.add(ring);
+ t3.hubGlow=addGlow3(hub,.18,0x4ee59b,.8);
+ addLabel3(hub,'Pakistan signal hub',true);
+ d.points.forEach((p,i)=>{
+   const v=latLonToV3(p[0],p[1],1.008);
+   const m=new THREE.Mesh(new THREE.SphereGeometry(.016,12,12),new THREE.MeshBasicMaterial({color:col}));m.position.copy(v);t3.markers.add(m);
+   addGlow3(v,.11,col.getHex(),.7);
+   const mid=hub.clone().add(v).multiplyScalar(.5).normalize().multiplyScalar(1.09+hub.distanceTo(v)*.32);
+   const curve=new THREE.QuadraticBezierCurve3(hub.clone().multiplyScalar(1.006),mid,v.clone().multiplyScalar(1.006));
+   const acol=col.clone().lerp(new THREE.Color(0xffffff),.35);
+   t3.markers.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(curve.getPoints(56)),new THREE.LineBasicMaterial({color:acol,transparent:true,opacity:.7,blending:THREE.AdditiveBlending,depthWrite:false})));
+   if(i<4)addLabel3(v,d.pop,false);
+ });
+}
+function updateLabels3d(){
+ if(!t3||!mode3d)return;
+ const w=innerWidth,h=innerHeight;
+ t3.labels.forEach(l=>{
+  const wp=t3.earth.localToWorld(l.v.clone());
+  const vis=wp.clone().normalize().dot(t3.cam.position.clone().normalize())>.12;
+  if(!vis){l.el.style.display='none';return;}
+  const pr=wp.project(t3.cam);
+  l.el.style.display='block';
+  l.el.style.left=((pr.x*.5+.5)*w)+'px';
+  l.el.style.top=((-pr.y*.5+.5)*h)+'px';
+ });
+}
+const liveTexCache={};
+// Draws Web-Mercator tiles x0..x1, y0..y1 (inclusive) at zoom z onto one canvas.
+function loadTileRect(urlFn,z,x0,x1,y0,y1){
+ return new Promise(res=>{
+  const c=document.createElement('canvas');c.width=(x1-x0+1)*256;c.height=(y1-y0+1)*256;
+  const ctx=c.getContext('2d');
+  let pending=(x1-x0+1)*(y1-y0+1);
+  const done=()=>{if(--pending===0)res(c)};
+  // NASA GIBS occasionally answers a tile with a temporary 500; retry each tile up to twice before leaving it blank.
+  const load=(x,y,tries)=>{
+   const img=new Image();img.crossOrigin='anonymous';
+   img.onload=()=>{try{ctx.drawImage(img,(x-x0)*256,(y-y0)*256,256,256)}catch(e){}done()};
+   img.onerror=()=>tries<2?setTimeout(()=>load(x,y,tries+1),800*(tries+1)):done();
+   img.src=urlFn(z,x,y)+(tries?(urlFn(z,x,y).includes('?')?'&':'?')+'retry='+tries:'');
+  };
+  for(let x=x0;x<=x1;x++)for(let y=y0;y<=y1;y++)load(x,y,0);
+ });
+}
+function loadWorldTiles(id,ext,z,lvl){
+ const n=Math.pow(2,z)-1;
+ return loadTileRect((z,x,y)=>'https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/'+id+'/default/GoogleMapsCompatible_Level'+lvl+'/'+z+'/'+y+'/'+x+'.'+ext,z,0,n,0,n);
+}
+const ESRI_SAT=(z,x,y)=>'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/'+z+'/'+y+'/'+x;
+// Reprojects a Mercator tile canvas (from loadTileRect) to an equirectangular lon/lat window.
+function mercatorPatchToEquirect(src,z,x0,y0,lonW,lonE,latS,latN,outW){
+ const W=256*Math.pow(2,z),outH=Math.round(outW*(latN-latS)/(lonE-lonW));
+ const sd=src.getContext('2d').getImageData(0,0,src.width,src.height).data,sw=src.width,sh=src.height;
+ const out=document.createElement('canvas');out.width=outW;out.height=outH;
+ const octx=out.getContext('2d'),od=octx.createImageData(outW,outH),dd=od.data;
+ const xs=new Int32Array(outW);
+ for(let x=0;x<outW;x++){const lon=lonW+(x+.5)/outW*(lonE-lonW);xs[x]=Math.min(sw-1,Math.max(0,((lon+180)/360*W-x0*256)|0));}
+ for(let y=0;y<outH;y++){
+  const lat=Math.max(-85.05,Math.min(85.05,latN-(y+.5)/outH*(latN-latS)))*Math.PI/180;
+  const sy=Math.min(sh-1,Math.max(0,((1-Math.log(Math.tan(Math.PI/4+lat/2))/Math.PI)/2*W-y0*256)|0));
+  const ro=y*outW*4,so=sy*sw*4;
+  for(let x=0;x<outW;x++){const ri=ro+x*4,si=so+xs[x]*4;dd[ri]=sd[si];dd[ri+1]=sd[si+1];dd[ri+2]=sd[si+2];dd[ri+3]=255;}
+ }
+ octx.putImageData(od,0,0);
+ return out;
+}
+// Global Esri imagery (zoom 4) as one 4096×2048 equirectangular canvas, loaded once and shared by the 3D view and the driver card.
+let satWorldReq=null;
+function getSatWorld(){
+ if(!satWorldReq)satWorldReq=loadTileRect(ESRI_SAT,4,0,15,0,15).then(c=>mercatorPatchToEquirect(c,4,0,0,-180,180,-90,90,4096));
+ return satWorldReq;
+}
+// High-resolution satellite base for the 3D globe: global Esri imagery at zoom 4, plus a zoom-7 patch over Pakistan.
+function loadSatBase3(rd,baseMat){
+ const aniso=rd.capabilities.getMaxAnisotropy();
+ getSatWorld().then(ec=>{
+  const tex=new THREE.CanvasTexture(ec);tex.anisotropy=aniso;
+  baseMat.map=tex;baseMat.color.set(0xffffff);baseMat.needsUpdate=true;
+ });
+ const R={lonW:50,lonE:90,latS:15,latN:45,z:7};
+ const n=Math.pow(2,R.z),tx=lon=>Math.floor((lon+180)/360*n),ty=lat=>{const r=lat*Math.PI/180;return Math.floor((1-Math.log(Math.tan(Math.PI/4+r/2))/Math.PI)/2*n);};
+ const x0=tx(R.lonW),x1=tx(R.lonE),y0=ty(R.latN),y1=ty(R.latS);
+ loadTileRect(ESRI_SAT,R.z,x0,x1,y0,y1).then(c=>mercatorPatchToEquirect(c,R.z,x0,y0,R.lonW,R.lonE,R.latS,R.latN,Math.min(4096,Math.round((R.lonE-R.lonW)/360*n*256)))).then(ec=>{
+  const tex=new THREE.CanvasTexture(ec);tex.anisotropy=aniso;
+  const D=Math.PI/180;
+  const patch=new THREE.Mesh(new THREE.SphereGeometry(1.0012,96,96,(R.lonW+180)*D,(R.lonE-R.lonW)*D,(90-R.latN)*D,(R.latN-R.latS)*D),new THREE.MeshBasicMaterial({map:tex}));
+  t3.earth.add(patch);
+ });
+}
+function mercatorToEquirect(src){
+ const W=src.width,H=W>>1;
+ const sd=src.getContext('2d').getImageData(0,0,W,W).data;
+ const out=document.createElement('canvas');out.width=W;out.height=H;
+ const octx=out.getContext('2d');const od=octx.createImageData(W,H);const dd=od.data;
+ for(let y=0;y<H;y++){
+  const lat=(90-(y+.5)/H*180)*Math.PI/180;
+  let sy=-1;
+  if(Math.abs(lat)<1.4844){
+   sy=(W/2-W*Math.log(Math.tan(Math.PI/4+lat/2))/(2*Math.PI))|0;
+   if(sy<0)sy=0; if(sy>=W)sy=W-1;
+  }
+  const ro=y*W*4,so=sy*W*4;
+  for(let x=0;x<W;x++){
+   const ri=ro+x*4;
+   if(sy<0){dd[ri+3]=0;continue;}
+   const si=so+x*4;
+   dd[ri]=sd[si];dd[ri+1]=sd[si+1];dd[ri+2]=sd[si+2];dd[ri+3]=sd[si+3];
+  }
+ }
+ octx.putImageData(od,0,0);
+ return out;
+}
+// ---- Wind on the 3D globe: the same GFS data and colours as the 2D wind layer (Western disturbances 500 hPa,
+// Jet stream 250 hPa). Two layers: the whole world, plus a sharper patch over the western-disturbance corridor
+// (Mediterranean -> Pakistan) for when the globe is focused on Pakistan. Textures run longitude/latitude left-right/top-bottom.
+const WIND3_LAYERS=[
+ {key:'world',w:1024,h:512,lon0:-180,lon1:180,lat0:-90,lat1:90,parts:3500,radius:1.0045,line:1.1},
+ {key:'region',w:1536,h:768,lon0:30,lon1:90,lat0:15,lat1:45,parts:2200,radius:1.0055,line:1.3}];
+const W3R=WIND3_LAYERS[1];
+function inW3(L,lat,lon){return lat>=L.lat0&&lat<=L.lat1&&lon>=L.lon0&&lon<=L.lon1;}
+function makeWind3Layer(cfg){
+ const mk=()=>{const c=document.createElement('canvas');c.width=cfg.w;c.height=cfg.h;return c;},D=Math.PI/180;
+ const field=mk(),trails=mk(),comp=mk(),tex=new THREE.CanvasTexture(comp);
+ const geo=cfg.key==='world'?new THREE.SphereGeometry(cfg.radius,96,96)
+  :new THREE.SphereGeometry(cfg.radius,64,48,(cfg.lon0+180)*D,(cfg.lon1-cfg.lon0)*D,(90-cfg.lat1)*D,(cfg.lat1-cfg.lat0)*D);
+ const mesh=new THREE.Mesh(geo,new THREE.MeshBasicMaterial({map:tex,transparent:true,depthWrite:false}));
+ mesh.visible=false;t3.earth.add(mesh);
+ return {...cfg,field,trails,comp,tex,mesh,list:[]};
+}
+function buildWind3(level){
+ if(!t3)return;
+ if(!t3.wind)t3.wind={layers:WIND3_LAYERS.map(makeWind3Layer),level:null,frame:0};
+ const W=t3.wind;W.level=level;W.layers.forEach(L=>{L.list=[];L.mesh.visible=false;});
+ fetchWind().then(()=>{
+  if(W.level!==level)return;
+  W.layers.forEach(L=>{
+   // speed colours: one sample per 4x4 block on a small canvas, smoothed up to full size
+   const sw=L.w/4,sh=L.h/4,small=document.createElement('canvas');small.width=sw;small.height=sh;
+   const sc=small.getContext('2d'),img=sc.createImageData(sw,sh),px=img.data;
+   for(let j=0;j<sh;j++)for(let i=0;i<sw;i++){
+    const lat=L.lat1-(j+.5)/sh*(L.lat1-L.lat0),lon=L.lon0+(i+.5)/sw*(L.lon1-L.lon0);
+    if(L.key==='world'&&inW3(W3R,lat,lon))continue; // the detailed patch colours its own area (no doubled tint)
+    const w=windAt(lat,lon,level);if(!w)continue;
+    const c=windColor(Math.hypot(w[0],w[1]),level),o=(j*sw+i)*4;px[o]=c[0];px[o+1]=c[1];px[o+2]=c[2];px[o+3]=150;
+   }
+   sc.putImageData(img,0,0);
+   const fc=L.field.getContext('2d');fc.clearRect(0,0,L.w,L.h);fc.imageSmoothingEnabled=true;fc.drawImage(small,0,0,L.w,L.h);
+   L.trails.getContext('2d').clearRect(0,0,L.w,L.h);
+   for(let n=0;n<L.parts;n++)L.list.push(spawn3({},L));
+   L.mesh.visible=true;
+  });
+ }).catch(()=>{if(W.level===level)toast('Wind data unavailable right now - try again later');});
+}
+function spawn3(p,L){
+ if(L.key==='world'){do{p.lon=Math.random()*360-180;p.lat=Math.asin(Math.random()*2-1)*180/Math.PI;}while(inW3(W3R,p.lat,p.lon));} // the patch covers its own area
+ else{p.lon=L.lon0+Math.random()*(L.lon1-L.lon0);p.lat=L.lat0+Math.random()*(L.lat1-L.lat0);}
+ p.age=Math.random()*80|0;return p;
+}
+function stopWind3(){if(t3&&t3.wind){t3.wind.level=null;t3.wind.layers.forEach(L=>{L.list=[];L.mesh.visible=false;});}}
+function windFrame3(){
+ const W=t3&&t3.wind;if(!W||!W.level)return;
+ const k=W.level===250?.0045:.007;
+ W.layers.forEach(L=>{
+  if(!L.list.length)return;
+  const tc=L.trails.getContext('2d'),X=lon=>(lon-L.lon0)/(L.lon1-L.lon0)*L.w,Y=lat=>(L.lat1-lat)/(L.lat1-L.lat0)*L.h;
+  tc.globalCompositeOperation='destination-in';tc.fillStyle='rgba(0,0,0,.93)';tc.fillRect(0,0,L.w,L.h);
+  tc.globalCompositeOperation='source-over';tc.strokeStyle='rgba(255,255,255,.9)';tc.lineWidth=L.line;tc.beginPath();
+  L.list.forEach(p=>{
+   const w=windAt(p.lat,p.lon,W.level);
+   if(!w||++p.age>100||Math.abs(p.lat)>84){spawn3(p,L);p.age=0;return;}
+   let lon=p.lon+w[0]*k/Math.max(.2,Math.cos(p.lat*Math.PI/180)),lat=p.lat+w[1]*k;
+   if(L.key==='world'){if(lon>180)lon-=360;if(lon<-180)lon+=360;if(inW3(W3R,lat,lon)){spawn3(p,L);p.age=0;return;}}
+   else if(!inW3(L,lat,lon)){spawn3(p,L);p.age=0;return;}
+   if(Math.abs(lon-p.lon)<180){tc.moveTo(X(p.lon),Y(p.lat));tc.lineTo(X(lon),Y(lat));}
+   p.lon=lon;p.lat=lat;
+  });
+  tc.stroke();
+ });
+ const L=W.layers[++W.frame%2]; // upload one layer's texture per frame, alternating
+ const cc=L.comp.getContext('2d');cc.clearRect(0,0,L.w,L.h);cc.drawImage(L.field,0,0);cc.drawImage(L.trails,0,0);
+ L.tex.needsUpdate=true;
+}
+
+// ---- Focus the 3D globe on Pakistan (button, and automatically for the wind tabs) ----
+function globeFocusPakistan(){
+ if(!t3)return;
+ // find the globe rotation (same Euler order as the globe) that turns Pakistan to face the camera
+ const v=latLonToV3(30.5,70,1),e=new THREE.Euler(0,0,0,'YXZ'),w=new THREE.Vector3();let best={z:-2};
+ for(let rx=-1.1;rx<=1.1;rx+=.01)for(let ry=-Math.PI;ry<Math.PI;ry+=.01){e.set(rx,ry,0,'YXZ');w.copy(v).applyEuler(e);if(w.z>best.z)best={z:w.z,rx,ry};}
+ t3.focus={rx:best.rx,ry:best.ry,zoom:1.75};t3.spin=false;t3.pakFocus=true;globeNavState();
+}
+function globeWhole(){if(!t3)return;t3.focus={zoom:3.1};t3.spin=true;t3.pakFocus=false;globeNavState();}
+function globeSpin(){if(!t3)return;t3.spin=!t3.spin;if(t3.spin)t3.focus=t3.focus&&t3.focus.zoom?{zoom:t3.focus.zoom}:null;globeNavState();}
+function globeNavState(){
+ const b=document.querySelectorAll('#globeNav button');if(!b.length||!t3)return;
+ b[0].classList.toggle('on',!!t3.pakFocus);b[1].classList.toggle('on',t3.spin!==false);
+}
+function globeStep(){ // called every frame in 3D: ease toward the focus target
+ const now=performance.now(),dt=Math.min(.25,(now-(t3.lastStep||now))/1000);t3.lastStep=now;
+ const f=t3.focus;if(!f)return;const E=t3.earth,a=1-Math.exp(-dt*4); // time-based easing: ~1 s on any machine
+ if(f.rx!=null){E.rotation.x+=(f.rx-E.rotation.x)*a;let d=f.ry-E.rotation.y;d=Math.atan2(Math.sin(d),Math.cos(d));E.rotation.y+=d*a;}
+ if(f.zoom)t3.cam.position.z+=(f.zoom-t3.cam.position.z)*a;
+ if(Math.abs(t3.cam.position.z-(f.zoom||t3.cam.position.z))<.002&&(f.rx==null||(Math.abs(f.rx-E.rotation.x)<.002&&Math.abs(Math.atan2(Math.sin(f.ry-E.rotation.y),Math.cos(f.ry-E.rotation.y)))<.002)))t3.focus=null; // arrived
+}
+function buildLive3(key){ if(!t3)return;
+ const s=sources[key];
+ if(s&&s.wind){if(t3.overlay)t3.overlay.visible=false;t3.liveKey=key;buildWind3(s.wind);globeFocusPakistan();return;}
+ stopWind3();
+ if(!s||!s.gibs){if(t3.overlay)t3.overlay.visible=false;return;}
+ t3.liveKey=key;
+ const id=s.gibs[0],ext=s.gibs[1],lvl=s.gibs[2];
+ const apply=tex=>{
+  if(t3.liveKey!==key)return;
+  if(!t3.overlay){
+   t3.overlay=new THREE.Mesh(new THREE.SphereGeometry(1.003,64,64),new THREE.MeshBasicMaterial({transparent:true,opacity:.75,depthWrite:false}));
+   t3.earth.add(t3.overlay);
+  }
+  t3.overlay.material.map=tex;t3.overlay.material.needsUpdate=true;t3.overlay.visible=true;
+ };
+ if(liveTexCache[id]){apply(liveTexCache[id]);return;}
+ // Not downloaded yet: hide the previous tab's image at once (it would be the wrong data) and say it's loading.
+ if(t3.overlay)t3.overlay.visible=false;
+ toast('Loading NASA layer: '+s.label+'…');
+ t3.loadingIds=t3.loadingIds||new Set();
+ if(t3.loadingIds.has(id))return; // already downloading; apply() runs when it arrives if this tab is still selected
+ t3.loadingIds.add(id);
+ loadWorldTiles(id,ext,3,lvl).then(mercatorToEquirect).then(ec=>{
+  const tex=new THREE.CanvasTexture(ec);
+  liveTexCache[id]=tex;
+  const cur=t3.liveKey&&sources[t3.liveKey]; // the tab selected now (may be another tab that shares this layer)
+  if(mode3d&&cur&&cur.gibs&&cur.gibs[0]===id)buildLive3(t3.liveKey);
+ }).catch(()=>{toast('NASA layer unavailable right now - try again shortly');}).finally(()=>t3.loadingIds.delete(id));
+}
+function init3D(){
+ const host=document.getElementById('globe3d');
+ host.style.touchAction='none';
+ const s=new THREE.Scene();
+ const cam=new THREE.PerspectiveCamera(42,innerWidth/innerHeight,.1,100);cam.position.set(0,0,3.1);
+ const rd=new THREE.WebGLRenderer({antialias:true,alpha:true});rd.setPixelRatio(Math.min(devicePixelRatio,2));rd.setSize(innerWidth,innerHeight);rd.setClearColor(0x000000,0);host.appendChild(rd.domElement); // transparent: the tinted space background shows through
+ const sg=new THREE.BufferGeometry(),sp=[];
+ for(let i=0;i<900;i++){const v=new THREE.Vector3(Math.random()-.5,Math.random()-.5,Math.random()-.5).normalize().multiplyScalar(14+Math.random()*26);sp.push(v.x,v.y,v.z);}
+ sg.setAttribute('position',new THREE.Float32BufferAttribute(sp,3));
+ s.add(new THREE.Points(sg,new THREE.PointsMaterial({color:0xcfe4ff,size:.14,transparent:true,opacity:.85})));
+ const earth=new THREE.Group();earth.rotation.order='YXZ';
+ const hub0=latLonToV3(30.3,69.3,1);
+ earth.rotation.y=Math.atan2(-hub0.x,hub0.z);earth.rotation.x=0;s.add(earth);
+ let mat;
+ if(typeof EARTH_TEX!=='undefined'){const tex=new THREE.TextureLoader().load(EARTH_TEX);tex.anisotropy=rd.capabilities.getMaxAnisotropy();mat=new THREE.MeshBasicMaterial({map:tex,color:0xffffff});}
+ else mat=new THREE.MeshBasicMaterial({color:0x0f4a63});
+ earth.add(new THREE.Mesh(new THREE.SphereGeometry(1,128,128),mat));
+ loadSatBase3(rd,mat);
+ const atmo=[new THREE.Mesh(new THREE.SphereGeometry(1.05,48,48),new THREE.MeshBasicMaterial({color:0x3ac0ff,transparent:true,opacity:.34,side:THREE.BackSide,blending:THREE.AdditiveBlending,depthWrite:false})),
+  new THREE.Mesh(new THREE.SphereGeometry(1.16,48,48),new THREE.MeshBasicMaterial({color:0x1e7fd0,transparent:true,opacity:.2,side:THREE.BackSide,blending:THREE.AdditiveBlending,depthWrite:false}))];
+ atmo.forEach(m=>earth.add(m));
+ const gm=new THREE.LineBasicMaterial({color:0x49cce9,transparent:true,opacity:.15});
+ for(let lat=-60;lat<=60;lat+=30){const p=[];for(let lon=0;lon<=360;lon+=5)p.push(latLonToV3(lat,lon,1.004));earth.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(p),gm));}
+ for(let lon=0;lon<360;lon+=30){const p=[];for(let lat=-90;lat<=90;lat+=5)p.push(latLonToV3(lat,lon,1.004));earth.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(p),gm));}
+  const markers=new THREE.Group();earth.add(markers);
+  if(typeof BOUND_TEX!=='undefined'){
+   const bi=new Image();
+   bi.onload=()=>{
+    const c=document.createElement('canvas');c.width=bi.width;c.height=bi.height;
+    const x=c.getContext('2d');x.drawImage(bi,0,0);
+    const id=x.getImageData(0,0,c.width,c.height),dd=id.data;
+    // The source image fills land with grey (170) and draws borders dark; keep only borders + coastlines as cyan lines.
+    const W=c.width,H=c.height,src=new Uint8ClampedArray(dd);
+    for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+     const i=(y*W+x)*4;let a=0;
+     if(src[i+3]>0){
+      a=Math.max(0,Math.min(255,(165-src[i])*1.6));
+      if(!a){const nb=[x>0?i-4:i,x<W-1?i+4:i,y>0?i-W*4:i,y<H-1?i+W*4:i];for(const j of nb)if(src[j+3]===0){a=255;break;}}
+     }
+     dd[i]=110;dd[i+1]=230;dd[i+2]=255;dd[i+3]=a;
+    }
+    x.putImageData(id,0,0);
+    const bt=new THREE.CanvasTexture(c);
+    const bm=new THREE.Mesh(new THREE.SphereGeometry(1.0035,64,64),new THREE.MeshBasicMaterial({map:bt,transparent:true,depthWrite:false,blending:THREE.AdditiveBlending,opacity:.9}));
+    earth.add(bm);
+   };
+   bi.src=BOUND_TEX;
+  }
+ t3={s,cam,rd,earth,markers,atmo,tint:new THREE.Color(0x3ac0ff),wrap:document.getElementById('label3dWrap'),labels:[],drag:false};
+ host.addEventListener('pointerdown',e=>{t3.drag=true;t3.focus=null;t3.spin=false;t3.pakFocus=false;globeNavState();drag3={x:e.clientX,y:e.clientY};host.setPointerCapture(e.pointerId);});
+ host.addEventListener('pointermove',e=>{if(!t3.drag||!drag3)return;earth.rotation.y+=(e.clientX-drag3.x)*.005;earth.rotation.x=Math.max(-1.1,Math.min(1.1,earth.rotation.x+(e.clientY-drag3.y)*.004));drag3={x:e.clientX,y:e.clientY};});
+ host.addEventListener('pointerup',()=>{t3.drag=false;drag3=null;});
+ host.addEventListener('pointercancel',()=>{t3.drag=false;drag3=null;});
+ host.addEventListener('wheel',e=>{e.preventDefault();if(t3.focus)t3.focus.zoom=null;cam.position.z=Math.max(1.5,Math.min(6,cam.position.z+e.deltaY*.0022));},{passive:false});
+ addEventListener('resize',()=>{if(!t3)return;cam.aspect=innerWidth/innerHeight;cam.updateProjectionMatrix();rd.setSize(innerWidth,innerHeight);});
+ buildDriver3(active);
+}
+const viewBtn=document.getElementById('viewBtn');
+function setMode3d(v){
+ if(v&&terrainOn)setTerrain(false);
+ mode3d=v;
+ document.body.classList.toggle('mode3d',v);
+ viewBtn.classList.toggle('on',v);
+ viewBtn.textContent=v?'🗺 2D':'🌐 3D';
+ document.querySelector('.maplabel').textContent=v?'3D GLOBE • Drag to rotate • Scroll to zoom • Satellite: Esri World Imagery (Esri, Maxar, Earthstar Geographics) • NASA GIBS live layer':'LIVE ANALYTICAL MAP • Switch driver layers with the cards below';
+ if(v){
+  if(!t3)init3D();
+  else{t3.cam.aspect=innerWidth/innerHeight;t3.cam.updateProjectionMatrix();t3.rd.setSize(innerWidth,innerHeight);}
+  buildDriver3(active);globePreview=active;globeTint(active);
+  buildLive3(active);
+ }else if(typeof map!=='undefined'){map.invalidateSize();resetWind();}
+}
+viewBtn.addEventListener('click',()=>setMode3d(!mode3d));
+
+// ---- 3D terrain (Mapbox GL JS + Mapbox terrain DEM), loaded on first use ----
+let terrainOn=false,tmap=null,tSpin=true,tLoading=null;
+const terrainBtn=document.getElementById('terrainBtn');
+// Forecast cities ([lon, lat]); also labelled in the 3D terrain view, where clicking one opens its forecast.
+const FC_CITIES=[
+ {n:'Islamabad',ll:[73.05,33.69]},{n:'Lahore',ll:[74.34,31.55]},{n:'Karachi',ll:[67.01,24.86]},{n:'Peshawar',ll:[71.58,34.01]},
+ {n:'Quetta',ll:[66.99,30.18]},{n:'Multan',ll:[71.47,30.20]},{n:'Faisalabad',ll:[73.08,31.42]},{n:'Hyderabad',ll:[68.37,25.40]},
+ {n:'Sukkur',ll:[68.86,27.70]},{n:'Gwadar',ll:[62.32,25.13]},{n:'Muzaffarabad',ll:[73.47,34.37]},{n:'Gilgit',ll:[74.31,35.92]},
+ {n:'Skardu',ll:[75.63,35.30]},{n:'Chitral',ll:[71.79,35.85]}
+];
+const PLACES=[
+ {n:'K2 & Karakoram',c:[76.51,35.88],z:9.4,p:72,b:-35},
+ {n:'Nanga Parbat',c:[74.59,35.24],z:10.2,p:70,b:160},
+ {n:'Hunza Valley',c:[74.66,36.32],z:10.6,p:70,b:40},
+ {n:'Hindu Kush',c:[71.84,36.26],z:9.6,p:70,b:200},
+ {n:'Tarbela Dam',c:[72.69,34.09],z:11.2,p:65,b:120},
+ {n:'Islamabad',c:[73.05,33.72],z:10.8,p:62,b:-20},
+ {n:'Quetta',c:[67.0,30.18],z:9.6,p:66,b:90},
+ {n:'Indus Delta',c:[67.6,24.3],z:8.4,p:55,b:0},
+ {n:'All Pakistan',c:[69.3,30.3],z:4.8,p:40,b:0}
+];
+function loadAsset(tag,attrs){return new Promise((res,rej)=>{const e=document.createElement(tag);Object.assign(e,attrs);e.onload=res;e.onerror=()=>rej(new Error('could not load '+(attrs.src||attrs.href)));document.head.appendChild(e);});}
+function ensureMapboxGL(){
+ if(window.mapboxgl)return Promise.resolve();
+ if(!tLoading)tLoading=Promise.all([loadAsset('link',{rel:'stylesheet',href:'lib/mapbox-gl.css'}),loadAsset('script',{src:'lib/mapbox-gl.js'})]);
+ return tLoading;
+}
+function initTerrain(){
+ mapboxgl.accessToken=MAPBOX_TOKEN;
+ tmap=new mapboxgl.Map({container:'terrain3d',style:'mapbox://styles/mapbox/satellite-streets-v12',center:[75.2,35.7],zoom:7.4,pitch:70,bearing:-25,maxPitch:80,projection:'globe',attributionControl:true});
+ tmap.addControl(new mapboxgl.NavigationControl({visualizePitch:true}),'bottom-left');
+ tmap.on('style.load',()=>{
+  tmap.addSource('dem',{type:'raster-dem',url:'mapbox://mapbox.mapbox-terrain-dem-v1',tileSize:512,maxzoom:14});
+  tmap.setTerrain({source:'dem',exaggeration:1.7});
+  tmap.setFog({range:[1,12],color:'rgba(150,200,255,0.45)','high-color':'#2a5fd6','horizon-blend':0.08,'space-color':'#030a12','star-intensity':0.55});
+  tmap.addLayer({id:'sky',type:'sky',paint:{'sky-type':'atmosphere','sky-atmosphere-sun':[180,45],'sky-atmosphere-sun-intensity':15}});
+  twStart();
+  const pakData=HAS_PAK_BOUNDARY?PAK_BOUNDARY:(typeof COUNTRIES!=='undefined'?{type:'FeatureCollection',features:COUNTRIES.features.filter(f=>f.properties.i==='PAK')}:null);
+  if(pakData){
+   tmap.addSource('pak',{type:'geojson',data:pakData});
+   tmap.addLayer({id:'pak-glow',type:'line',source:'pak',filter:['!=',['get','disputed'],true],paint:{'line-color':ACCENT,'line-width':9,'line-blur':7,'line-opacity':.6}});
+   tmap.addLayer({id:'pak-line',type:'line',source:'pak',filter:['!=',['get','disputed'],true],paint:{'line-color':'#ffffff','line-width':1.6}});
+   tmap.addLayer({id:'pak-disputed',type:'line',source:'pak',filter:['==',['get','disputed'],true],paint:{'line-color':'#ffffff','line-width':1.4,'line-dasharray':[2,2]}});
+  }
+ });
+ FC_CITIES.forEach(c=>{
+  const el=document.createElement('div');el.className='tCity';el.title='Open the 7-day forecast for '+c.n;
+  el.innerHTML='<span class="wxi"></span><span>'+c.n+'</span><span class="tt"></span>';
+  el.addEventListener('click',e=>{e.stopPropagation();openForecast(c.n);});
+  new mapboxgl.Marker({element:el,anchor:'left'}).setLngLat(c.ll).addTo(tmap);
+  tw.cityEls[c.n]=el;
+ });
+ // Slow orbit until the user takes over (drag, scroll, touch); the ⟳ chip resumes it.
+ const stop=()=>{tSpin=false;spinBtn.classList.remove('on');};
+ ['mousedown','touchstart','wheel'].forEach(ev=>tmap.getCanvasContainer().addEventListener(ev,stop,{passive:true}));
+ (function orbit(){requestAnimationFrame(orbit);if(terrainOn&&tSpin&&!tmap.isMoving())tmap.setBearing(tmap.getBearing()+0.05);})();
+}
+// ---- Live weather in the 3D terrain: rain/snow, sun and sky follow the forecast where the camera looks ----
+var tw={key:null,data:null,at:0,cityEls:{},ticker:null,flash:null,busy:false}; // var: used by initTerrain via twStart
+function wxKind(code){
+ if(code>=95)return 'storm';
+ if((code>=71&&code<=77)||code===85||code===86)return 'snow';
+ if(code>=51)return 'rain';
+ if(code===45||code===48)return 'fog';
+ if(code===3)return 'cloud';
+ return code===2?'partly':'sun';
+}
+function sunPosition(date,lat,lon){ // returns {alt, az} in degrees; az clockwise from north
+ const rad=Math.PI/180,J=date.valueOf()/864e5+2440587.5-2451545,M=(357.5291+0.98560028*J)*rad;
+ const L=M+(1.9148*Math.sin(M)+0.02*Math.sin(2*M)+0.0003*Math.sin(3*M))*rad+102.9372*rad+Math.PI,e=23.4397*rad;
+ const dec=Math.asin(Math.sin(L)*Math.sin(e)),ra=Math.atan2(Math.sin(L)*Math.cos(e),Math.cos(L));
+ const H=(280.16+360.9856235*J)*rad+lon*rad-ra,phi=lat*rad;
+ const alt=Math.asin(Math.sin(phi)*Math.sin(dec)+Math.cos(phi)*Math.cos(dec)*Math.cos(H));
+ const az=Math.atan2(Math.sin(H),Math.cos(H)*Math.sin(phi)-Math.tan(dec)*Math.cos(phi));
+ return {alt:alt/rad,az:(az/rad+180)%360};
+}
+const mixRGB=(a,b,t)=>a.map((x,i)=>Math.round(x+(b[i]-x)*t));
+const rgba=(c,a)=>'rgba('+c.join(',')+','+a+')';
+function twApply(){
+ if(!tmap||!tw.data)return;
+ const cur=tw.data.current,code=cur.weather_code,k=wxKind(code),mm=cur.precipitation||0,cloud=(cur.cloud_cover||0)/100;
+ const c=tmap.getCenter(),sp=sunPosition(new Date(),c.lat,c.lng),day=Math.max(0,Math.min(1,(sp.alt+6)/12)); // 0 night .. 1 day
+ const grey=Math.min(1,cloud*(k==='sun'||k==='partly'?.5:1)+(k==='rain'||k==='storm'||k==='snow'||k==='fog'?.35:0));
+ // falling rain / snow
+ if(k==='rain'||k==='storm')tmap.setRain({density:k==='storm'?.9:Math.min(.85,.4+mm/4),intensity:Math.min(1,.45+mm/4),color:'#a8adbc',opacity:.75,vignette:.7,'vignette-color':'#3f4652',direction:[0,80],'droplet-size':[2.6,18.2],'distortion-strength':.6,'center-thinning':0});
+ else tmap.setRain(null);
+ if(k==='snow')tmap.setSnow({density:Math.min(.95,.55+mm/3),intensity:1,'center-thinning':.1,direction:[0,50],opacity:1,color:'#ffffff','flake-size':.71,vignette:.3,'vignette-color':'#ffffff'});
+ else tmap.setSnow(null);
+ // sky colour: clear blue -> overcast grey, darkening toward night
+ const dayFog=mixRGB([150,200,255],[150,158,170],grey),dayHigh=mixRGB([42,95,214],[92,100,112],grey);
+ tmap.setFog({range:[1,12],color:rgba(mixRGB([18,26,44],dayFog,day),.45+.2*grey),'high-color':rgba(mixRGB([8,12,28],dayHigh,day),1),
+  'horizon-blend':.08+.1*grey,'space-color':'#030a12','star-intensity':.8*(1-day)});
+ if(tmap.getLayer('sky')){
+  tmap.setPaintProperty('sky','sky-atmosphere-sun',[sp.az,Math.max(0,Math.min(180,90-sp.alt))]);
+  tmap.setPaintProperty('sky','sky-atmosphere-sun-intensity',2+13*day*(1-.7*grey));
+ }
+ if(tmap.getLayer('satellite')){ // dim the land at night and under heavy cloud
+  tmap.setPaintProperty('satellite','raster-brightness-max',.3+.7*day*(1-.3*grey));
+  tmap.setPaintProperty('satellite','raster-saturation',-.35*grey);
+ }
+ // lightning for thunderstorms
+ clearInterval(tw.flash);tw.flash=null;
+ if(k==='storm')tw.flash=setInterval(()=>{if(!terrainOn||Math.random()<.5)return;const f=document.getElementById('tFlash');f.style.opacity=.55;setTimeout(()=>f.style.opacity=0,90);setTimeout(()=>{f.style.opacity=.35;setTimeout(()=>f.style.opacity=0,70);},180);},2500);
+ // "weather here" chip
+ const [ic,ds]=wmo(code,cur.is_day),near=FC_CITIES.map(x=>({x,d:Math.hypot(x.ll[0]-c.lng,x.ll[1]-c.lat)})).sort((a,b)=>a.d-b.d)[0];
+ document.getElementById('tWx').textContent=ic+' '+(near.d<.15?near.x.n:near.d<.8?'near '+near.x.n:c.lat.toFixed(1)+'°N '+c.lng.toFixed(1)+'°E')+' now: '+ds+' · '+Math.round(cur.temperature_2m)+'°C'+
+  (mm>0?' · '+mm+' mm/h':'')+' · cloud '+Math.round(cloud*100)+'%'+(day<.3?' · night':'');
+}
+async function twUpdate(force){
+ if(!terrainOn||!tmap||tw.busy)return;
+ const c=tmap.getCenter(),lat=Math.round(c.lat*4)/4,lon=Math.round(c.lng*4)/4,key=lat+','+lon; // re-check when the view moves ~25 km
+ if(!force&&key===tw.key&&Date.now()-tw.at<10*60000){twApply();return;}
+ tw.busy=true;
+ try{const r=await fetch('/api/forecast?lat='+lat+'&lon='+lon);if(r.ok){tw.data=await r.json();tw.key=key;tw.at=Date.now();twApply();}}
+ catch(e){}finally{tw.busy=false;}
+}
+async function twCities(){ // animated badges: today's forecast for each city
+ try{
+  const js=pk.data||await (await fetch('/api/pakforecast')).json();if(!js.cities)return;
+  FC_CITIES.forEach(c=>{const d=js.cities[c.n],el=tw.cityEls[c.n];if(!d||!el)return;
+   const code=d.weather_code[0],k=wxKind(code),[ic,ds]=wmo(code);
+   el.classList.add('wx');el.querySelector('.wxi').className='wxi wx-'+k;el.querySelector('.wxi').textContent=ic;
+   el.querySelector('.tt').textContent=Math.round(d.temperature_2m_max[0])+'°'+(d.precipitation_sum[0]>=.1?' · '+d.precipitation_sum[0].toFixed(1)+' mm':'');
+   el.title=c.n+' today: '+ds+', high '+Math.round(d.temperature_2m_max[0])+'°C, low '+Math.round(d.temperature_2m_min[0])+'°C - click for the full forecast';});
+ }catch(e){}
+}
+function twStart(){
+ twCities();twUpdate(true);
+ clearInterval(tw.ticker);tw.ticker=setInterval(()=>twUpdate(false),2000); // follows fly-to and panning
+}
+const tNav=document.getElementById('terrainNav');
+PLACES.forEach(pl=>{const b=document.createElement('button');b.type='button';b.textContent=pl.n;
+ b.onclick=()=>{if(!tmap)return;tNav.querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b&&!x.classList.contains('spin')));tmap.flyTo({center:pl.c,zoom:pl.z,pitch:pl.p,bearing:pl.b,duration:4500,essential:true});};
+ tNav.appendChild(b);});
+const spinBtn=document.createElement('button');spinBtn.type='button';spinBtn.className='spin on';spinBtn.textContent='⟳ Auto-rotate';
+spinBtn.onclick=()=>{tSpin=!tSpin;spinBtn.classList.toggle('on',tSpin);};
+tNav.appendChild(spinBtn);
+const twChip=document.createElement('span');twChip.className='twx';twChip.id='tWx';twChip.textContent='⏳ loading weather…';
+tNav.appendChild(twChip);
+function setTerrain(v){
+ if(v&&mode3d)setMode3d(false);
+ terrainOn=v;
+ document.body.classList.toggle('modeTerrain',v);
+ terrainBtn.classList.toggle('on',v);
+ terrainBtn.textContent=v?'🗺 2D':'⛰ Terrain';
+ document.querySelector('.maplabel').textContent=v?'3D TERRAIN • Drag to pan • Right-drag or Ctrl+drag to tilt & rotate • Click a city for its forecast • Imagery & elevation: Mapbox':'LIVE ANALYTICAL MAP • Switch driver layers with the cards below';
+ if(v){
+  ensureMapboxGL().then(()=>{if(!tmap)initTerrain();else tmap.resize();})
+   .catch(e=>{toast('3D terrain unavailable: '+e.message);setTerrain(false);});
+ }else{map.invalidateSize();resetWind();}
+}
+terrainBtn.addEventListener('click',()=>setTerrain(!terrainOn));
+addEventListener('resize',()=>{if(tmap&&terrainOn)tmap.resize();});
+if(location.hash.toLowerCase().indexOf('terrain')>=0)setTerrain(true);
+else if(location.hash.toLowerCase().indexOf('3d')>=0)setMode3d(true);
+
+// ---- City forecasts in the portal's own design (Open-Meteo via portal_server.py /api/forecast, cached 30 min) ----
+const mb={modal:document.getElementById('mbModal'),city:null,data:null,chart:null};
+// WMO weather codes -> [day icon, text]
+const WMO={0:['☀️','Clear sky'],1:['🌤️','Mainly clear'],2:['⛅','Partly cloudy'],3:['☁️','Overcast'],45:['🌫️','Fog'],48:['🌫️','Freezing fog'],
+ 51:['🌦️','Light drizzle'],53:['🌦️','Drizzle'],55:['🌧️','Heavy drizzle'],56:['🌧️','Freezing drizzle'],57:['🌧️','Freezing drizzle'],
+ 61:['🌦️','Light rain'],63:['🌧️','Rain'],65:['🌧️','Heavy rain'],66:['🌧️','Freezing rain'],67:['🌧️','Freezing rain'],
+ 71:['🌨️','Light snow'],73:['🌨️','Snow'],75:['❄️','Heavy snow'],77:['🌨️','Snow grains'],
+ 80:['🌦️','Light showers'],81:['🌧️','Showers'],82:['⛈️','Violent showers'],85:['🌨️','Snow showers'],86:['❄️','Heavy snow showers'],
+ 95:['⛈️','Thunderstorm'],96:['⛈️','Thunderstorm with hail'],99:['⛈️','Severe thunderstorm with hail']};
+const wmo=(c,isDay=1)=>{const w=WMO[c]||['🌡️','—'];return (!isDay&&c<=2)?['🌙',w[1]]:w;};
+const compass=deg=>['N','NE','E','SE','S','SW','W','NW'][Math.round(((deg%360)+360)%360/45)%8];
+const r0=v=>v==null?'–':Math.round(v);
+const mbCityBox=document.getElementById('mbCities');
+FC_CITIES.forEach(c=>{const b=document.createElement('button');b.type='button';b.textContent=c.n;b.dataset.city=c.n;b.onclick=()=>fcShow(c.n);mbCityBox.appendChild(b);});
+if(HAS_DISTRICTS){ // any of the 167 districts: forecast at a point inside it
+ const dlist=document.getElementById('fcDistrictList'),dinp=document.getElementById('fcDistrict');
+ dlist.innerHTML=DISTRICTS.features.map(f=>'<option value="'+f.properties.n+' - '+f.properties.p+'">').join('');
+ dinp.addEventListener('change',()=>{const f=DISTRICTS.features.find(x=>x.properties.n+' - '+x.properties.p===dinp.value);
+  if(f){fcShow({n:f.properties.n+' district ('+f.properties.p+')',ll:f.properties.c});dinp.value='';}});
+}else document.querySelector('.fcSearch').style.display='none';
+function fcMsg(text){const m=document.getElementById('fcMsg');m.textContent=text||'';m.classList.toggle('on',!!text);document.getElementById('fcBody').style.display=text?'none':'';}
+async function fcShow(place){ // a city name, or {n:'label', ll:[lon,lat]} for any clicked point
+ const c=(place&&typeof place==='object')?place:(FC_CITIES.find(x=>x.n===place)||FC_CITIES[0]);
+ mb.city=c.n;
+ mbCityBox.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset.city===c.n));
+ document.getElementById('fcTitle').textContent='Weather forecast · '+c.n;
+ if(!mb.data||mb.data.city!==c.n)fcMsg('Loading the forecast for '+c.n+'…');
+ try{
+  const r=await fetch('/api/forecast?lat='+c.ll[1]+'&lon='+c.ll[0]);
+  const js=await r.json();
+  if(!r.ok)throw new Error(js.error||('error '+r.status));
+  if(mb.city!==c.n)return; // another city was picked meanwhile
+  mb.data={city:c.n,...js};
+  fcRender();fcMsg('');fcAir(c);
+ }catch(e){if(mb.city===c.n)fcMsg('Forecast unavailable right now ('+(e.message||'network error')+'). Try again in a minute.');}
+}
+// Air-quality card for the shown city/point (/api/airquality, cached 60 min on the server, 5 min in the browser)
+async function fcAir(c){
+ const box=document.getElementById('fcAir');
+ try{
+  const r=await fetch('/api/airquality?lat='+c.ll[1]+'&lon='+c.ll[0]);if(!r.ok)throw 0;
+  const js=await r.json();if(mb.city!==c.n)return;
+  const a=js.current,info=aqiInfo(a.us_aqi||0),h=js.hourly||{},now=a.time.slice(0,13);
+  const next=(h.time||[]).map((t,i)=>({t,v:h.us_aqi[i]})).filter(x=>x.t.slice(0,13)>=now&&x.v!=null).slice(0,24);
+  const worst=next.reduce((m,x)=>!m||x.v>m.v?x:m,null);
+  mb.air={aqi:a.us_aqi,category:info.cat,pm2_5:a.pm2_5,pm10:a.pm10,aod:a.aerosol_optical_depth,dust:a.dust,ozone:a.ozone,no2:a.nitrogen_dioxide,worst_next_24h:worst&&{aqi:worst.v,time:worst.t}};
+  box.innerHTML='<div class="aqi" style="background:'+info.color+'">'+r0(a.us_aqi)+'<small>US AQI</small></div>'+
+   '<div class="cat"><b>Air: '+info.cat+'</b>'+info.advice+(worst?' · worst next 24 h: AQI '+r0(worst.v)+' at '+worst.t.slice(11,16):'')+'</div>'+
+   '<div class="st">PM2.5<b>'+r0(a.pm2_5)+'</b></div><div class="st">PM10<b>'+r0(a.pm10)+'</b></div><div class="st">AOD<b>'+(a.aerosol_optical_depth!=null?a.aerosol_optical_depth.toFixed(2):'–')+'</b></div>'+
+   '<div class="st">Dust<b>'+r0(a.dust)+'</b></div><div class="st">Ozone<b>'+r0(a.ozone)+'</b></div><div class="st">NO₂<b>'+r0(a.nitrogen_dioxide)+'</b></div>';
+  box.title='Particles in µg/m³ · AOD = how hazy the air column is (0 clear, >1 very hazy) · source: Open-Meteo / CAMS'+(js.stale?' (saved copy)':'');
+ }catch(e){if(mb.city===c.n){box.innerHTML='';mb.air=null;}}
+}
+function fcRender(){ const d=mb.data,cur=d.current,day=d.daily,[ico,desc]=wmo(cur.weather_code,cur.is_day);
+ document.getElementById('fcNow').innerHTML=
+  '<div class="fcBig"><span class="ico">'+ico+'</span><span class="t">'+r0(cur.temperature_2m)+'<small>°C</small></span></div>'+
+  '<div class="fcDesc"><b>'+desc+'</b><span>Feels like '+r0(cur.apparent_temperature)+'°C · today '+r0(day.temperature_2m_min[0])+'° to '+r0(day.temperature_2m_max[0])+'° · sunrise '+day.sunrise[0].slice(11)+', sunset '+day.sunset[0].slice(11)+'</span></div>'+
+  '<div class="fcStats"><div>Wind<b>'+r0(cur.wind_speed_10m)+' km/h '+compass(cur.wind_direction_10m)+'</b></div><div>Gusts<b>'+r0(cur.wind_gusts_10m)+' km/h</b></div><div>Humidity<b>'+r0(cur.relative_humidity_2m)+'%</b></div>'+
+  '<div>Rain now<b>'+(cur.precipitation||0)+' mm</b></div><div>Cloud<b>'+r0(cur.cloud_cover)+'%</b></div><div>UV today<b>'+r0(day.uv_index_max[0])+'</b></div></div>';
+ document.getElementById('fcDays').innerHTML=day.time.map((t,i)=>{
+  const [ic,ds]=wmo(day.weather_code[i]),dn=i===0?'Today':new Date(t+'T12:00').toLocaleDateString('en-GB',{weekday:'short'});
+  const mm=day.precipitation_sum[i]||0,pp=day.precipitation_probability_max[i];
+  return '<div class="fcDay'+(i===0?' today':'')+'" title="'+ds+'"><div class="d">'+dn+'</div><div>'+t.slice(8)+'/'+t.slice(5,7)+'</div><div class="ico">'+ic+'</div>'+
+   '<div class="hl">'+r0(day.temperature_2m_max[i])+'° <span>'+r0(day.temperature_2m_min[i])+'°</span></div>'+
+   '<div class="rain'+(mm<0.1&&(pp||0)<30?' dry':'')+'">'+(mm>=0.1?mm.toFixed(1)+' mm':'dry')+(pp!=null?' · '+pp+'%':'')+'</div>'+
+   '<div class="mini">💨 '+r0(day.wind_speed_10m_max[i])+' (gust '+r0(day.wind_gusts_10m_max[i])+') km/h</div><div class="mini">UV '+r0(day.uv_index_max[i])+'</div></div>';}).join('');
+ // next 48 hours from the current hour
+ const h=d.hourly,start=Math.max(0,h.time.findIndex(t=>t>=cur.time.slice(0,13)+':00')),idx=[...Array(48).keys()].map(i=>start+i).filter(i=>i<h.time.length);
+ const labels=idx.map(i=>{const t=h.time[i];return t.slice(11,13)==='00'?new Date(t).toLocaleDateString('en-GB',{weekday:'short'})+' 00':t.slice(11,16);});
+ if(mb.chart)mb.chart.destroy();
+ mb.chart=new Chart(document.getElementById('fcChart'),{
+  data:{labels,datasets:[
+   {type:'line',label:'Temperature (°C)',data:idx.map(i=>h.temperature_2m[i]),borderColor:'#f59e0b',backgroundColor:'rgba(245,158,11,.12)',fill:true,tension:.35,pointRadius:0,borderWidth:2,yAxisID:'y'},
+   {type:'bar',label:'Chance of rain (%)',data:idx.map(i=>h.precipitation_probability[i]),backgroundColor:'rgba(56,189,248,.45)',borderRadius:2,yAxisID:'y1'},
+   {type:'line',label:'Wind (km/h)',data:idx.map(i=>h.wind_speed_10m[i]),borderColor:'#cbd5e1',borderDash:[4,3],pointRadius:0,borderWidth:1.5,tension:.35,yAxisID:'y2'}]},
+  options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},animation:{duration:400},
+   plugins:{legend:{labels:{color:'#cbd5e1',font:{size:10},boxWidth:10}},
+    tooltip:{callbacks:{afterBody:items=>{const i=idx[items[0].dataIndex];return 'Rain: '+(h.precipitation[i]||0)+' mm · '+wmo(h.weather_code[i])[1];}}}},
+   scales:{x:{ticks:{color:'#a8b8c6',font:{size:9},maxRotation:0,autoSkipPadding:10},grid:{display:false}},
+    y:{position:'left',ticks:{color:'#f59e0b',font:{size:9},callback:v=>v+'°'},grid:{color:'rgba(148,163,184,.12)'}},
+    y1:{position:'right',min:0,max:100,ticks:{color:'#38bdf8',font:{size:9},callback:v=>v+'%'},grid:{display:false}},
+    y2:{display:false,min:0}}}
+ });
+ const upd=d.fetched?new Date(d.fetched.replace(' UTC','Z').replace(' ','T')):null;
+ document.getElementById('fcUpdated').textContent='updated '+(upd&&!isNaN(upd)?upd.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',timeZone:'Asia/Karachi'})+' PKT':d.fetched||'')+(d.stale?' (saved copy - service busy)':'');
+}
+// Forecast window views: whole-Pakistan map (default from the Forecast button) or one city/point.
+function fcView(v){
+ mb.modal.querySelectorAll('.fcTabs button').forEach(b=>b.classList.toggle('on',b.dataset.view===v));
+ mb.modal.querySelectorAll('.fcView').forEach(p=>p.classList.toggle('on',p.dataset.view===v));
+ document.getElementById('fcSub').textContent=v==='map'?'Whole Pakistan · 7 days':'Now · 7 days · next 48 hours';
+ if(v==='map'){document.getElementById('fcTitle').textContent='Weather forecast · Pakistan';pkShow();}
+ else if(mb.data)document.getElementById('fcTitle').textContent='Weather forecast · '+mb.data.city;
+}
+mb.modal.querySelectorAll('.fcTabs button').forEach(b=>b.onclick=()=>{if(b.dataset.view==='city'&&!mb.city)fcShow(FC_CITIES[0].n);fcView(b.dataset.view);});
+function openForecast(place){ // no argument: Pakistan map; a city name or {n, ll:[lon,lat]}: that place's forecast
+ mb.modal.classList.add('on');
+ if(place){fcShow(place);fcView('city');}else fcView('map');
+}
+
+// ---- Whole-Pakistan forecast map: Open-Meteo 0.75° grid (via /api/pakforecast), clipped to the official boundary ----
+const PK_VARS={
+ precipitation_sum:{label:'Rain (mm)',unit:' mm',fmt:v=>v<0.1?'dry':v.toFixed(1)+' mm',
+  ramp:[[0,'rgba(0,0,0,0)'],[0.2,'rgba(191,219,254,.55)'],[2,'#7cc4fa'],[5,'#3b82f6'],[10,'#6366f1'],[20,'#a855f7'],[40,'#ec4899']]},
+ precipitation_probability_max:{label:'Chance of rain',unit:'%',fmt:v=>Math.round(v)+'%',
+  ramp:[[0,'rgba(0,0,0,0)'],[20,'rgba(148,163,184,.35)'],[40,'#7cc4fa'],[60,'#3b82f6'],[80,'#4f46e5'],[100,'#312e81']]},
+ temperature_2m_max:{label:'Max temperature',unit:'°C',fmt:v=>Math.round(v)+'°C',
+  ramp:[[-20,'#312e81'],[-10,'#3b82f6'],[0,'#93c5fd'],[10,'#a7f3d0'],[20,'#fde68a'],[30,'#f59e0b'],[40,'#dc2626'],[48,'#7f1d1d']]},
+ temperature_2m_min:{label:'Min temperature',unit:'°C',fmt:v=>Math.round(v)+'°C',
+  ramp:[[-25,'#312e81'],[-10,'#3b82f6'],[0,'#93c5fd'],[10,'#a7f3d0'],[20,'#fde68a'],[28,'#f59e0b'],[35,'#dc2626']]},
+ wind_speed_10m_max:{label:'Max wind (km/h)',unit:' km/h',fmt:v=>Math.round(v)+' km/h',
+  ramp:[[0,'#1e3a8a'],[10,'#0ea5e9'],[20,'#22c55e'],[30,'#eab308'],[45,'#f97316'],[60,'#dc2626']]},
+ // air quality (Open-Meteo / CAMS, 5 days; colours follow the US AQI breakpoints)
+ us_aqi:{src:'aq',label:'Air quality (AQI)',note:'worst hour of the day',unit:'',fmt:v=>'AQI '+Math.round(v),
+  ramp:[[0,'#22c55e'],[50,'#eab308'],[100,'#f97316'],[150,'#ef4444'],[200,'#a855f7'],[300,'#7f1d1d']]},
+ pm2_5:{src:'aq',label:'Smog: PM2.5',note:'daily average',unit:' µg/m³',fmt:v=>Math.round(v)+' µg/m³',
+  ramp:[[0,'#22c55e'],[12,'#eab308'],[35,'#f97316'],[55,'#ef4444'],[150,'#a855f7'],[250,'#7f1d1d']]},
+ pm10:{src:'aq',label:'Smog: PM10',note:'daily average',unit:' µg/m³',fmt:v=>Math.round(v)+' µg/m³',
+  ramp:[[0,'#22c55e'],[54,'#eab308'],[154,'#f97316'],[254,'#ef4444'],[354,'#a855f7'],[424,'#7f1d1d']]},
+ aerosol_optical_depth:{src:'aq',label:'Aerosol (AOD)',note:'daily average · 0 clear, over 1 very hazy',unit:'',fmt:v=>v.toFixed(2)+' AOD',
+  ramp:[[0,'rgba(0,0,0,0)'],[0.1,'#fef3c7'],[0.3,'#fcd34d'],[0.6,'#f59e0b'],[1,'#b45309'],[2,'#7c2d12']]},
+ dust:{src:'aq',label:'Dust',note:'daily peak',unit:' µg/m³',fmt:v=>Math.round(v)+' µg/m³',
+  ramp:[[0,'rgba(0,0,0,0)'],[20,'#fde68a'],[50,'#f59e0b'],[100,'#d97706'],[200,'#92400e'],[500,'#451a03']]}
+};
+// US AQI categories: label, colour, short health advice
+function aqiInfo(v){
+ const t=[[50,'Good','#22c55e','Air is clean.'],[100,'Moderate','#eab308','Unusually sensitive people should limit long outdoor exertion.'],
+  [150,'Unhealthy for sensitive groups','#f97316','Children, the elderly and people with asthma or heart disease should reduce outdoor activity.'],
+  [200,'Unhealthy','#ef4444','Everyone should reduce prolonged outdoor exertion; sensitive groups stay indoors.'],
+  [300,'Very unhealthy','#a855f7','Avoid outdoor activity; wear a mask (N95) if you must go out.'],[1e9,'Hazardous','#7f1d1d','Stay indoors with windows closed; health warning for everyone.']];
+ const r=t.find(x=>v<=x[0]);return {cat:r[1],color:r[2],advice:r[3]};
+}
+const pkSet=()=>PK_VARS[pk.v].src==='aq'?pk.aq:pk.data; // dataset behind the selected variable
+const pk={map:null,data:null,aq:null,day:0,v:'precipitation_sum',overlay:null,labels:null,req:null};
+function parseColor(c){const x=document.createElement('canvas').getContext('2d');x.fillStyle=c;const s=x.fillStyle;
+ if(s[0]==='#')return [parseInt(s.slice(1,3),16),parseInt(s.slice(3,5),16),parseInt(s.slice(5,7),16),255];
+ const m=s.match(/[\d.]+/g).map(Number);return [m[0],m[1],m[2],Math.round((m[3]??1)*255)];}
+for(const k in PK_VARS)PK_VARS[k].stops=PK_VARS[k].ramp.map(([v,c])=>[v,parseColor(c)]);
+function pkColor(v,stops){
+ if(v==null)return [0,0,0,0];
+ if(v<=stops[0][0])return stops[0][1];
+ for(let i=1;i<stops.length;i++)if(v<=stops[i][0]){const [a,ca]=stops[i-1],[b,cb]=stops[i],f=(v-a)/(b-a);return ca.map((x,j)=>x+(cb[j]-x)*f);}
+ return stops[stops.length-1][1];
+}
+function pkValue(lat,lon){ // bilinear value of the selected variable/day at a point, or null outside the grid
+ const D=pkSet(),g=D&&D.grid;if(!g||pk.day>=D.days.length)return null;
+ const fx=(lon-g.lon0)/g.step,fy=(lat-g.lat0)/g.step;if(fx<0||fy<0||fx>g.nx-1||fy>g.ny-1)return null;
+ const A=D.vars[pk.v][pk.day],x0=Math.min(Math.floor(fx),g.nx-2),y0=Math.min(Math.floor(fy),g.ny-2),tx=fx-x0,ty=fy-y0;
+ const at=(y,x)=>A[y*g.nx+x];const q=[at(y0,x0),at(y0,x0+1),at(y0+1,x0),at(y0+1,x0+1)];if(q.some(v=>v==null))return null;
+ return (q[0]*(1-tx)+q[1]*tx)*(1-ty)+(q[2]*(1-tx)+q[3]*tx)*ty;
+}
+// City labels use the city's own point forecast (the grid averages towns with surrounding mountains).
+function pkCityValue(c){const D=pkSet(),v=D&&D.cities&&D.cities[c.n]&&D.cities[c.n][pk.v];return v&&v[pk.day]!=null?v[pk.day]:pkValue(c.ll[1],c.ll[0]);}
+// District average of the selected variable/day (mean over sample points inside the district), cached per view.
+function pkDistrictValue(d){
+ const key=pk.v+'|'+pk.day+'|'+(pkSet()||{}).fetched;
+ if(d.avgKey!==key){const vals=d.samples.map(([la,lo])=>pkValue(la,lo)).filter(v=>v!=null);d.avg=vals.length?vals.reduce((a,b)=>a+b,0)/vals.length:null;d.avgKey=key;}
+ return d.avg;
+}
+function pkDistrictTable(){ // [{name, province, value}] for every district with data, highest first
+ if(!HAS_DISTRICTS)return [];
+ return DISTRICTS.features.filter(d=>!d.properties.disputed).map(d=>({name:d.properties.n,province:d.properties.p,value:pkDistrictValue(d)}))
+  .filter(x=>x.value!=null).sort((a,b)=>b.value-a.value);
+}
+function pkRankDistricts(){
+ const box=document.getElementById('pkRank'),V=PK_VARS[pk.v],rows=pkDistrictTable();
+ if(!rows.length){box.innerHTML='';return;}
+ const top=rows.slice(0,5),cold=pk.v.startsWith('temperature')?rows.slice(-3).reverse():null;
+ box.innerHTML='<b>Highest districts</b> · '+V.label+'<ol>'+top.map(x=>'<li>'+x.name+' <small>('+x.province.replace(' Capital Territory','')+')</small> <span>'+V.fmt(x.value)+'</span></li>').join('')+'</ol>'+
+  (cold?'<b>Coldest</b><ol>'+cold.map(x=>'<li>'+x.name+' <span>'+V.fmt(x.value)+'</span></li>').join('')+'</ol>':'');
+}function pkInit(){
+ pk.map=L.map('pkMap',{zoomControl:true,attributionControl:true,minZoom:4,maxZoom:9}).fitBounds([[23.6,60.8],[37.1,77.9]]);
+ L.tileLayer('https://api.mapbox.com/styles/v1/mapbox/dark-v11/tiles/512/{z}/{x}/{y}@2x?access_token='+MAPBOX_TOKEN,
+  {tileSize:512,zoomOffset:-1,attribution:'&copy; Mapbox &copy; OpenStreetMap · Weather data: Open-Meteo'}).addTo(pk.map);
+ pk.map.createPane('pkTop').style.zIndex=450;
+ if(HAS_PAK_BOUNDARY)L.geoJSON(PAK_BOUNDARY,{pane:'pkTop',interactive:false,style:f=>({color:'#ffffff',weight:f.properties.disputed?1.2:1.6,opacity:.9,dashArray:f.properties.disputed?'6 5':null,fill:false})}).addTo(pk.map);
+ if(HAS_DISTRICTS)L.geoJSON(DISTRICTS,{pane:'pkTop',interactive:false,style:f=>({color:'#e2e8f0',weight:.6,opacity:.45,fill:false,dashArray:f.properties.disputed?'4 4':null})}).addTo(pk.map);
+ pk.labels=L.layerGroup().addTo(pk.map);
+ pk.map.on('mousemove',e=>{const v=pkValue(e.latlng.lat,e.latlng.lng),V=PK_VARS[pk.v],d=districtAt(e.latlng.lat,e.latlng.lng),dv=d&&pkDistrictValue(d);
+  document.getElementById('pkInfo').innerHTML=v==null?'Hover for values · click anywhere for that spot\'s full forecast':
+   (d?'<b>'+d.properties.n+'</b> district · '+d.properties.p+' · pop. '+(d.properties.pop/1e6).toFixed(1)+' M<br>District average: '+(dv==null?'–':V.fmt(dv)+(pk.v==='us_aqi'?' - '+aqiInfo(dv).cat:''))+' · this spot: ':e.latlng.lat.toFixed(2)+'°N '+e.latlng.lng.toFixed(2)+'°E · ')+
+   V.fmt(v)+' · click for this spot\'s full forecast';});
+ pk.map.on('click',e=>{if(pkValue(e.latlng.lat,e.latlng.lng)==null)return;
+  const lat=+e.latlng.lat.toFixed(2),lon=+e.latlng.lng.toFixed(2);
+  const near=FC_CITIES.map(c=>({c,d:Math.hypot(c.ll[0]-lon,c.ll[1]-lat)})).sort((a,b)=>a.d-b.d)[0];
+  const d=districtAt(lat,lon);
+  openForecast({n:d?d.properties.n+' district ('+lat+'°N '+lon+'°E)':lat+'°N '+lon+'°E'+(near.d<1?' (near '+near.c.n+')':''),ll:[lon,lat]});});
+ // day / variable buttons
+ const vb=document.getElementById('pkVars');
+ const ab=document.getElementById('pkAqVars');
+ for(const k in PK_VARS){const b=document.createElement('button');b.type='button';b.textContent=PK_VARS[k].label;b.dataset.v=k;b.onclick=()=>{pk.v=k;pkDraw();};(PK_VARS[k].src==='aq'?ab:vb).appendChild(b);}
+}
+async function pkShow(){
+ if(!pk.map)pkInit();
+ setTimeout(()=>pk.map.invalidateSize(),50);
+ if(!pk.aq||Date.now()-(pk.aqAt||0)>30*60000) // air quality loads alongside; a failure only affects the air views
+  fetch('/api/aqmap').then(r=>r.ok?r.json():null).then(js=>{if(js){pk.aq=js;pk.aqAt=Date.now();pkDraw();}}).catch(()=>{});
+ if(pk.data&&!pk.data.stale&&Date.now()-pk.loadedAt<30*60000){pkDraw();return;}
+ const msg=document.getElementById('pkMsg');
+ try{
+  const r=await fetch('/api/pakforecast'),js=await r.json();
+  if(!r.ok)throw new Error(js.error||'error '+r.status);
+  pk.data=js;pk.loadedAt=Date.now();msg.classList.remove('on');
+  const db=document.getElementById('pkDays');db.innerHTML='';
+  js.days.forEach((t,i)=>{const b=document.createElement('button');b.type='button';b.dataset.day=i;
+   b.textContent=(i===0?'Today':new Date(t+'T12:00').toLocaleDateString('en-GB',{weekday:'short'}))+' '+t.slice(8)+'/'+t.slice(5,7);
+   b.onclick=()=>{pk.day=i;pkDraw();};db.appendChild(b);});
+  pkDraw();
+ }catch(e){msg.textContent=(e.message||'Forecast map unavailable')+'. It will appear automatically once ready - reopen in a minute.';msg.classList.add('on');}
+}
+function pkDraw(){
+ if(!pk.data)return;
+ const D=pkSet();
+ document.querySelectorAll('#pkDays button').forEach(b=>{b.classList.toggle('on',+b.dataset.day===pk.day);b.classList.toggle('na',!!D&&+b.dataset.day>=D.days.length);});
+ document.querySelectorAll('#pkVars button,#pkAqVars button').forEach(b=>b.classList.toggle('on',b.dataset.v===pk.v));
+ if(!D||pk.day>=D.days.length){ // air data not loaded yet, or a day beyond its 5-day range
+  if(pk.overlay){pk.map.removeLayer(pk.overlay);pk.overlay=null;}pk.labels.clearLayers();
+  document.getElementById('pkLegend').innerHTML=D?'Air-quality forecasts cover the next '+D.days.length+' days - pick an earlier day.':'Air-quality data is loading - it appears in a moment.';
+  return;
+ }
+ const g=D.grid,V=PK_VARS[pk.v],S=g.lat0,N=g.lat0+(g.ny-1)*g.step,W=g.lon0,E=g.lon0+(g.nx-1)*g.step;
+ // canvas in Web Mercator rows so it lines up with the map
+ const my=lat=>Math.log(Math.tan(Math.PI/4+lat*Math.PI/360)),yN=my(N),yS=my(S),w=520,h=Math.round(w*(yN-yS)/((E-W)*Math.PI/180));
+ const cv=document.createElement('canvas');cv.width=w;cv.height=h;const x=cv.getContext('2d'),img=x.createImageData(w,h),px=img.data;
+ for(let j=0;j<h;j++){const lat=Math.atan(Math.sinh(yN-(j+.5)/h*(yN-yS)))*180/Math.PI;
+  for(let i=0;i<w;i++){const c=pkColor(pkValue(lat,W+(i+.5)/w*(E-W)),V.stops),o=(j*w+i)*4;px[o]=c[0];px[o+1]=c[1];px[o+2]=c[2];px[o+3]=c[3];}}
+ x.putImageData(img,0,0);
+ if(HAS_PAK_BOUNDARY){ // keep colour only inside the official boundary
+  x.globalCompositeOperation='destination-in';x.beginPath();
+  const P=([lon,lat])=>[(lon-W)/(E-W)*w,(yN-my(lat))/(yN-yS)*h];
+  PAK_BOUNDARY.features.forEach(f=>f.geometry.coordinates.forEach(poly=>poly.forEach(ring=>ring.forEach((pt,k)=>{const [a,b]=P(pt);k?x.lineTo(a,b):x.moveTo(a,b);}))));
+  x.fill('evenodd');
+ }
+ if(pk.overlay)pk.map.removeLayer(pk.overlay);
+ pk.overlay=L.imageOverlay(cv.toDataURL(),[[S,W],[N,E]],{opacity:.85,interactive:false}).addTo(pk.map);
+ // city values
+ pk.labels.clearLayers();
+ FC_CITIES.forEach(c=>{const v=pkCityValue(c);if(v==null)return;
+  L.marker([c.ll[1],c.ll[0]],{interactive:false,pane:'pkTop',icon:L.divIcon({className:'',html:'<div class="pkCity">'+V.fmt(v)+'<br><small>'+c.n+'</small></div>',iconSize:[0,0]})}).addTo(pk.labels);});
+ // district ranking: highest district averages for this variable and day
+ pkRankDistricts();
+ // legend
+ const st=V.ramp;document.getElementById('pkLegend').innerHTML='<b style="color:var(--ink)">'+V.label+(V.note?' ('+V.note+')':'')+' · '+document.querySelector('#pkDays .on').textContent+'</b>'+
+  '<div class="bar" style="background:linear-gradient(90deg,'+st.map(([v,c],i)=>c+' '+(i/(st.length-1)*100)+'%').join(',')+')"></div>'+
+  '<div class="ticks">'+st.map(([v])=>'<span>'+v+'</span>').join('')+'</div>'+
+  '<div style="margin-top:4px">'+(V.src==='aq'?'Open-Meteo / CAMS air quality':'Open-Meteo')+' · updated '+D.fetched+(D.stale?' (refreshing)':'')+'</div>';
+}
+function closeForecast(){mb.modal.classList.remove('on');}
+document.getElementById('mbBtn').addEventListener('click',()=>openForecast());
+document.getElementById('mbClose').addEventListener('click',closeForecast);
+mb.modal.addEventListener('click',e=>{if(e.target===mb.modal)closeForecast();});
+addEventListener('keydown',e=>{if(e.key==='Escape')closeForecast();});
+
+function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.style.opacity=1;t.style.transform='translateX(-50%) translateY(0)';clearTimeout(window.tt);window.tt=setTimeout(()=>{t.style.opacity=0;t.style.transform='translateX(-50%) translateY(15px)'},1800)}
+const descriptions={
+ enso:'ENSO modifies tropical circulation and can alter Pakistan monsoon and seasonal temperature/rainfall patterns.',
+ iod:'IOD changes the west–east Indian Ocean SST gradient and can modulate South Asian monsoon rainfall.',
+ mjo:'MJO is a subseasonal tropical convection pulse useful for 1–6 week rainfall and thunderstorm outlooks.',
+ sst:'Arabian Sea SST influences moisture availability, coastal heat and monsoon moisture transport.',
+ bengal:'Bay of Bengal convection is a major moisture source for the South Asian monsoon circulation.',
+ wd:'Western disturbances are a primary source of winter rain and snowfall across northern and western Pakistan.',
+ jet:'Jet-stream position helps determine the track and intensity of western disturbances and large-scale weather systems.',
+ tibet:'Tibetan Plateau heating contributes to the thermal structure supporting the South Asian summer monsoon.',
+ ao:'AO affects Northern Hemisphere pressure patterns and can influence cold-air outbreaks and winter circulation.',
+ nao:'NAO-related circulation changes can influence Eurasian weather patterns and western-disturbance pathways.',
+ snow:'Eurasian snow cover can modify land heating and downstream circulation relevant to monsoon variability.'
+};
+let dvmChart=null;
+function hexRgb(h){h=h.replace('#','');return parseInt(h.substr(0,2),16)+','+parseInt(h.substr(2,2),16)+','+parseInt(h.substr(4,2),16);}
+
+// ---- Driver card globe: satellite earth, atmosphere glow, arcs with moving pulses, floating labels ----
+let mg=null;
+function initMiniGlobe(){
+ const host=document.getElementById('dvmGlobe'),S=380;
+ const scene=new THREE.Scene();
+ const cam=new THREE.PerspectiveCamera(36,1,.1,50);cam.position.set(0,0,3.6);
+ const rd=new THREE.WebGLRenderer({antialias:true,alpha:true});rd.setPixelRatio(Math.min(devicePixelRatio,2));rd.setSize(S,S);rd.setClearColor(0x000000,0);
+ host.insertBefore(rd.domElement,host.firstChild);
+ const tilt=new THREE.Group(),spin=new THREE.Group();tilt.add(spin);scene.add(tilt);
+ const mat=new THREE.MeshBasicMaterial({color:0x9cc2ff});
+ if(typeof EARTH_TEX!=='undefined')mat.map=new THREE.TextureLoader().load(EARTH_TEX);
+ spin.add(new THREE.Mesh(new THREE.SphereGeometry(1,96,96),mat));
+ getSatWorld().then(ec=>{const t=new THREE.CanvasTexture(ec);t.anisotropy=rd.capabilities.getMaxAnisotropy();mat.map=t;mat.needsUpdate=true;});
+ const gm=new THREE.LineBasicMaterial({color:0x6fd6ff,transparent:true,opacity:.12});
+ for(let lat=-60;lat<=60;lat+=30){const p=[];for(let lon=0;lon<=360;lon+=5)p.push(latLonToV3(lat,lon,1.003));spin.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(p),gm));}
+ for(let lon=0;lon<360;lon+=30){const p=[];for(let lat=-90;lat<=90;lat+=5)p.push(latLonToV3(lat,lon,1.003));spin.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(p),gm));}
+ // Fresnel atmosphere: outer halo + inner rim
+ const vs='varying vec3 vN;void main(){vN=normalize(normalMatrix*normal);gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}';
+ scene.add(new THREE.Mesh(new THREE.SphereGeometry(1.16,64,64),new THREE.ShaderMaterial({vertexShader:vs,
+  fragmentShader:'varying vec3 vN;void main(){float i=pow(0.72-dot(vN,vec3(0.0,0.0,1.0)),3.2);gl_FragColor=vec4(0.25,0.68,1.0,1.0)*i;}',
+  side:THREE.BackSide,blending:THREE.AdditiveBlending,transparent:true,depthWrite:false})));
+ scene.add(new THREE.Mesh(new THREE.SphereGeometry(1.004,64,64),new THREE.ShaderMaterial({vertexShader:vs,
+  fragmentShader:'varying vec3 vN;void main(){float i=pow(1.0-dot(vN,vec3(0.0,0.0,1.0)),2.6);gl_FragColor=vec4(0.35,0.75,1.0,1.0)*i*0.9;}',
+  blending:THREE.AdditiveBlending,transparent:true,depthWrite:false})));
+ const markers=new THREE.Group();spin.add(markers);
+ mg={host,S,scene,cam,rd,tilt,spin,markers,labels:[],pulses:[],target:{x:0,y:0},drag:null,raf:0,open:false};
+ host.addEventListener('pointerdown',e=>{mg.drag={x:e.clientX,y:e.clientY};host.setPointerCapture(e.pointerId);host.style.cursor='grabbing';});
+ host.addEventListener('pointermove',e=>{if(!mg.drag)return;mg.target.y+=(e.clientX-mg.drag.x)*.006;mg.target.x=Math.max(-1.2,Math.min(1.2,mg.target.x+(e.clientY-mg.drag.y)*.005));mg.drag={x:e.clientX,y:e.clientY};});
+ const end=()=>{mg.drag=null;host.style.cursor='';};
+ host.addEventListener('pointerup',end);host.addEventListener('pointercancel',end);
+}
+function buildMiniGlobe(key){
+ if(!mg)initMiniGlobe();
+ const d=pts3d[key];if(!d)return;
+ clearGroup3(mg.markers);mg.labels.forEach(l=>l.el.remove());mg.labels=[];mg.pulses=[];
+ const col=new THREE.Color(d.color);
+ const hub=latLonToV3(30.3,69.3,1.01);
+ const addLabel=(v,text,isHub)=>{const el=document.createElement('div');el.className='lbl3d'+(isHub?' hub':'');el.textContent=text;document.getElementById('dvmLbls').appendChild(el);mg.labels.push({el,v:v.clone()});};
+ const dot=(v,c,r)=>{const m=new THREE.Mesh(new THREE.SphereGeometry(r,14,14),new THREE.MeshBasicMaterial({color:c}));m.position.copy(v);mg.markers.add(m);};
+ const halo=(v,c,s,o)=>{if(!glowTex)glowTex=makeGlowTex();const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:glowTex,color:c,transparent:true,opacity:o,blending:THREE.AdditiveBlending,depthWrite:false}));sp.position.copy(v);sp.scale.set(s,s,1);mg.markers.add(sp);return sp;};
+ dot(hub,0x4ee59b,.026);mg.hubHalo=halo(hub,0x4ee59b,.22,.9);
+ const ring=new THREE.Mesh(new THREE.RingGeometry(.04,.048,40),new THREE.MeshBasicMaterial({color:0x4ee59b,transparent:true,opacity:.75,side:THREE.DoubleSide}));ring.position.copy(hub);ring.lookAt(0,0,0);mg.markers.add(ring);
+ addLabel(hub,'Pakistan signal hub',true);
+ const center=hub.clone().normalize();
+ d.points.forEach((p,i)=>{
+  const v=latLonToV3(p[0],p[1],1.008);center.add(v.clone().normalize());
+  dot(v,col,.018);halo(v,col.getHex(),.13,.8);
+  const mid=hub.clone().add(v).multiplyScalar(.5).normalize().multiplyScalar(1.08+hub.distanceTo(v)*.35);
+  const curve=new THREE.QuadraticBezierCurve3(hub.clone(),mid,v.clone());
+  mg.markers.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(curve.getPoints(64)),new THREE.LineBasicMaterial({color:col.clone().lerp(new THREE.Color(0xffffff),.35),transparent:true,opacity:.75,blending:THREE.AdditiveBlending,depthWrite:false})));
+  mg.pulses.push({sp:halo(v,0xffffff,.07,.95),curve,t:i/d.points.length});
+  if(i<4)addLabel(v,d.pop+' '+(i+1),false);
+ });
+ // turn the globe so the middle of the hub + driver region faces the camera
+ center.normalize();
+ mg.target.y=Math.atan2(-center.x,center.z);
+ mg.target.x=Math.atan2(center.y,Math.hypot(center.x,center.z));
+}
+function miniFrame(){
+ if(!mg.open){mg.raf=0;return;}
+ mg.raf=requestAnimationFrame(miniFrame);
+ mg.spin.rotation.y+=(mg.target.y-mg.spin.rotation.y)*.08;
+ mg.tilt.rotation.x+=(mg.target.x-mg.tilt.rotation.x)*.08;
+ mg.pulses.forEach(p=>{p.t=(p.t+.006)%1;p.sp.position.copy(p.curve.getPoint(p.t));});
+ if(mg.hubHalo)mg.hubHalo.material.opacity=.55+.35*Math.sin(performance.now()*.004);
+ mg.rd.render(mg.scene,mg.cam);
+ const camDir=mg.cam.position.clone().normalize();
+ mg.labels.forEach(l=>{
+  const wp=l.v.clone().applyMatrix4(mg.spin.matrixWorld);
+  if(wp.clone().normalize().dot(camDir)<.15){l.el.style.display='none';return;}
+  const pr=wp.project(mg.cam);
+  const half=l.el.offsetWidth/2+4;
+  l.el.style.display='block';l.el.style.left=Math.max(half,Math.min(mg.S-half,(pr.x*.5+.5)*mg.S))+'px';l.el.style.top=((-pr.y*.5+.5)*mg.S)+'px';
+ });
+}
+
+// ---- Driver card chart: lib/indices.js (NOAA / NASA / Rutgers, from update_data.py) or the daily GFS winds for the jet ----
+const PHASE={
+ enso:v=>v>=.5?'El Niño conditions':v<=-.5?'La Niña conditions':'ENSO-neutral',
+ iod:v=>v>=.4?'Positive IOD':v<=-.4?'Negative IOD':'Neutral IOD',
+ ao:v=>v>=0?'Positive phase':'Negative phase',
+ nao:v=>v>=0?'Positive phase':'Negative phase'
+};
+function jetSeries(){
+ // 250 hPa wind speed averaged over 30°N and 35°N, by longitude
+ const g=windData&&windData[250];if(!g)return null;
+ const labels=[],values=[];
+ for(let lon=15;lon<=125;lon+=5){
+  const sp=lat=>{const w=windAt(lat,lon,250);return w?Math.hypot(w[0],w[1]):0;};
+  labels.push(lon+'°E');values.push(Math.round((sp(30)+sp(35))/2*10)/10);
+ }
+ return {title:'250 hPa wind speed along 30–35°N',unit:'m/s',source:'GFS via Open-Meteo',url:sources.jet.url,labels,values,kind:'line',through:windDay,xIsLon:true};
+}
+function fmt(v,u){return (Math.abs(v)<10?v.toFixed(2):v.toFixed(1))+(u?' '+u:'');}
+function setText(id,t){document.getElementById(id).textContent=t;}
+function renderDriverChart(key,name,color){
+ const empty=document.getElementById('dvmEmpty'),cv=document.getElementById('dvmChart');
+ if(dvmChart){dvmChart.destroy();dvmChart=null;}
+ const s=key==='jet'?jetSeries():(typeof CLIMATE_DATA!=='undefined'&&CLIMATE_DATA.series[key]);
+ ['kLatest','kChange','kThrough'].forEach(id=>setText(id,'–'));
+ ['kLatestS','kChangeS','kSource'].forEach(id=>setText(id,''));setText('kChangeK','Change');
+ if(!s||!s.values||!s.values.length){
+  setText('dvmChartTitle',name);setText('dvmSrcLink','');
+  empty.style.display='flex';cv.style.display='none';
+  if(key==='jet'){
+   empty.textContent='Loading today’s GFS wind data…';
+   fetchWind().then(()=>{if(dvm.classList.contains('on')&&active==='jet')renderDriverChart(key,name,color);}).catch(e=>{empty.textContent='Live jet-stream data is unavailable right now ('+e.message+'). The portal retries automatically, so reopen this card later.';});
+  }else empty.textContent='No data yet. Run "python update_data.py" in the dashboard folder to download the latest NOAA / NASA series.';
+  return;
+ }
+ empty.style.display='none';cv.style.display='block';
+ setText('dvmChartTitle',s.title+' ');
+ const us=document.createElement('span');us.style.textTransform='none';us.textContent='('+s.unit+')';document.getElementById('dvmChartTitle').appendChild(us);
+ const sl=document.getElementById('dvmSrcLink');sl.textContent=s.source+' ↗';sl.href=s.url;
+ const vals=s.values,n=vals.length,last=vals[n-1],prev=vals[n-2];
+ if(s.xIsLon){
+  const mx=Math.max(...vals);
+  setText('kLatest',fmt(mx,'m/s'));setText('kLatestS','Jet core near '+s.labels[vals.indexOf(mx)]);
+  setText('kChangeK','Average');setText('kChange',fmt(vals.reduce((a,b)=>a+b,0)/n,'m/s'));setText('kChangeS','mean along 30–35°N');
+ }else{
+  setText('kLatest',fmt(last,s.unit));
+  setText('kLatestS',PHASE[key]?PHASE[key](last):s.labels[n-1]);
+  if(prev!==undefined){const dl=last-prev;setText('kChange',(dl>=0?'▲ ':'▼ ')+fmt(Math.abs(dl),''));setText('kChangeS','vs '+s.labels[n-2]);}
+ }
+ setText('kThrough',s.through||s.labels[n-1]);
+ setText('kSource',s.source);
+ const rgb=hexRgb(color),diverging=vals.some(v=>v<0),ds=[];
+ if(s.kind==='bar'){
+  ds.push({type:'bar',label:s.title,data:vals,borderRadius:3,maxBarThickness:16,
+   backgroundColor:vals.map(v=>diverging?(v>=0?'rgba(245,158,11,.9)':'rgba(56,189,248,.9)'):'rgba('+rgb+',.8)')});
+ }else{
+  ds.push({type:'line',label:s.names?s.names[0]:s.title,data:vals,borderColor:color,backgroundColor:'rgba('+rgb+',.14)',fill:!s.values2,tension:.35,pointRadius:0,pointHoverRadius:4,borderWidth:2});
+  if(s.values2)ds.push({type:'line',label:s.names[1],data:s.values2,borderColor:'#ffc857',tension:.35,pointRadius:0,borderWidth:2});
+ }
+ (s.thresholds||[]).forEach(t=>ds.push({type:'line',label:'threshold '+t,data:vals.map(()=>t),borderColor:'rgba(255,255,255,.35)',borderDash:[4,4],borderWidth:1,pointRadius:0,fill:false}));
+ dvmChart=new Chart(cv,{
+  type:s.kind==='bar'?'bar':'line',
+  data:{labels:s.labels,datasets:ds},
+  options:{responsive:true,maintainAspectRatio:false,animation:{duration:600},interaction:{mode:'index',intersect:false},
+   plugins:{legend:{display:!!s.values2,labels:{color:'#cbd5e1',font:{size:9},boxWidth:10}},
+    tooltip:{filter:i=>!/^threshold/.test(i.dataset.label),callbacks:{label:c=>' '+c.dataset.label+': '+c.parsed.y+' '+s.unit}}},
+   scales:{x:{ticks:{color:'#a8b8c6',font:{size:9},maxRotation:0,autoSkipPadding:8},grid:{display:false}},
+    y:{ticks:{color:'#a8b8c6',font:{size:9}},grid:{color:'rgba(148,163,184,.12)'},title:{display:true,text:s.unit,color:'#a8b8c6',font:{size:9}}}}}
+ });
+}
+function openDriverCard(key,name){
+ const d=pts3d[key];if(!d)return;
+ setText('dvmTitle',name);
+ document.getElementById('dvmChip').style.background=d.color;
+ document.getElementById('dvmChip').style.color=d.color;
+ setText('dvmDesc',descriptions[key]||'');
+ const s=sources[key];
+ document.getElementById('dvmNull').href=(s&&s.url)?s.url:'https://earth.nullschool.net/';
+ document.getElementById('dvmNull2').style.display=key==='wd'?'':'none';
+ document.getElementById('dvmNull2').href=sources.jet.url;
+ const upd=typeof CLIMATE_DATA!=='undefined'?' · series downloaded '+CLIMATE_DATA.updated:'';
+ setText('dvmLive',(s&&s.label?(s.wind?s.label:'Map: NASA GIBS · '+s.label):'')+upd);
+ dvm.classList.add('on');
+ buildMiniGlobe(key);
+ mg.open=true;if(!mg.raf)miniFrame();
+ renderDriverChart(key,name,d.color);
+}
+const dvm=document.getElementById('drvModal');
+function closeDriverCard(){dvm.classList.remove('on');if(mg)mg.open=false;}
+document.getElementById('dvmClose').addEventListener('click',closeDriverCard);
+dvm.addEventListener('click',e=>{if(e.target===dvm)closeDriverCard();});
+addEventListener('keydown',e=>{if(e.key==='Escape')closeDriverCard();});
+
+document.querySelectorAll('.bottombar .layer').forEach(btn=>{const d=pts3d[btn.dataset.layer];if(d)btn.style.setProperty('--c',d.color);});
+function globeTint(key){
+ const c=(pts3d[key]||{}).color||ACCENT;
+ document.getElementById('globe3d').style.setProperty('--glow',c);
+ if(t3)t3.tint=new THREE.Color(c);
+}
+let globePreview=null;
+function globeHover(key){ // key = hovered driver, or null to go back to the selected one
+ if(!mode3d||!t3)return;
+ const k=key||active;if(k===globePreview)return;globePreview=k;
+ globeTint(k);buildDriver3(k);
+}
+document.querySelectorAll('.bottombar .layer').forEach(btn=>{
+ btn.addEventListener('mouseenter',()=>globeHover(btn.dataset.layer));
+ btn.addEventListener('focus',()=>globeHover(btn.dataset.layer));
+ btn.addEventListener('mouseleave',()=>globeHover(null));
+ btn.addEventListener('blur',()=>globeHover(null));
+});
+document.querySelectorAll('.bottombar .layer').forEach(btn=>btn.addEventListener('pointermove',e=>{const r=btn.getBoundingClientRect();btn.style.setProperty('--mx',((e.clientX-r.left)/r.width*100)+'%');btn.style.setProperty('--my',((e.clientY-r.top)/r.height*100)+'%');}));
+document.querySelectorAll('.layer').forEach(btn=>{
+ btn.addEventListener('click',()=>{
+   const key=btn.dataset.layer;
+   if(layers[active]) map.removeLayer(layers[active]);
+   active=key; layers[active].addTo(map);
+   applyLive(key);
+   if(mode3d){buildDriver3(key);buildLive3(key);}
+   document.querySelectorAll('.layer').forEach(x=>x.classList.remove('active'));
+   btn.classList.add('active');
+   document.getElementById('activeTitle').textContent='Active layer: '+btn.querySelector('.layername').textContent;
+   document.getElementById('activeText').textContent=descriptions[key]+' (Prototype layer — connect the relevant live dataset for operational use.)';
+    toast('Activated '+btn.querySelector('.layername').textContent);
+    openDriverCard(key,btn.querySelector('.layername').textContent);
+  });
+});
+
+// ---- Panels driven by lib/indices.js: influence scores, trend, contribution, forecast horizon ----
+// Scores are a transparent heuristic: 50 = normal, each driver's standardized anomaly (z vs 1991-2020) pushes it up or down.
+const DRV_NAME={enso:'ENSO',iod:'IOD',mjo:'MJO',sst:'Arabian Sea SST',bengal:'Bay of Bengal',wd:'W. disturbance rain',tibet:'Tibetan Plateau',ao:'Arctic Osc.',nao:'North Atlantic',snow:'Eurasian snow'};
+const SCORE_W={
+ monsoon:{enso:-1,iod:.8,sst:.5,bengal:.5,tibet:.5,mjo:.3},
+ winter:{enso:.7,nao:.5,wd:.6},
+ heat:{tibet:1,sst:.6,bengal:.4,enso:.3},
+ flood:{sst:.6,bengal:.4,iod:.5,enso:-.4,wd:.5}
+};
+const SCORE_NAME={monsoon:'Monsoon',winter:'Winter precipitation',heat:'Heat risk',flood:'Flood-supporting signal'};
+const CD=typeof CLIMATE_DATA!=='undefined'?CLIMATE_DATA.series:null;
+function latestZ(k){const s=CD&&CD[k];return s&&s.z&&s.z.length?s.z[s.z.length-1]:0;}
+function scoreFrom(w,zf){
+ let tot=0,sw=0;const parts=[];
+ for(const k in w){const c=w[k]*zf(k);tot+=c;sw+=Math.abs(w[k]);parts.push([k,c]);}
+ const score=Math.max(0,Math.min(100,Math.round(50+25*tot/sw)));
+ const agree=parts.reduce((a,[k,c])=>a+(Math.sign(c)===Math.sign(tot)&&c!==0?Math.abs(w[k]):0),0)/sw;
+ parts.sort((a,b)=>Math.abs(b[1])-Math.abs(a[1]));
+ return {score,agree,parts};
+}
+function activateDriver(k){const b=document.querySelector('.bottombar .layer[data-layer="'+k+'"]');if(b){b.click();b.scrollIntoView({behavior:'smooth',inline:'center',block:'nearest'});}}
+const fz=z=>(z>=0?'+':'')+z.toFixed(1)+'σ';
+const tickFont={size:10},tickCol='#a8b8c6';
+
+if(CD){
+ // Left panel + KPI cards
+ for(const id in SCORE_W){
+  const r=scoreFrom(SCORE_W[id],latestZ);
+  document.getElementById('sc_'+id).textContent=r.score+' / 100';
+  document.getElementById('bar_'+id).style.width=r.score+'%';
+  document.getElementById('sub_'+id).textContent=(r.score>=60?'Above normal':r.score<=40?'Below normal':'Near normal')+' · led by '+DRV_NAME[r.parts[0][0]]+' '+fz(latestZ(r.parts[0][0]));
+  document.getElementById('row_'+id).onclick=()=>activateDriver(r.parts[0][0]);
+ }
+
+ // Trend: monthly scores over the last 12 months (drivers carried forward when a series lags, MJO excluded as it is pentad data)
+ const months=CD.enso.labels.slice(-12),zAt={};
+ for(const k in CD){if(k==='mjo')continue;const m={};CD[k].labels.forEach((l,i)=>m[l]=CD[k].z[i]);zAt[k]=m;}
+ const carry={},series={monsoon:[],winter:[],heat:[],flood:[]};
+ const allLabels=CD.enso.labels;
+ allLabels.forEach(l=>{
+  for(const k in zAt)if(zAt[k][l]!==undefined)carry[k]=zAt[k][l];
+  if(months.indexOf(l)<0)return;
+  for(const id in series)series[id].push(scoreFrom(SCORE_W[id],k=>carry[k]||0).score);
+ });
+ const TC={monsoon:'#38bdf8',winter:'#cbd5e1',heat:'#f59e0b',flood:'#2dd4bf'};
+ new Chart(document.getElementById('trend'),{
+  type:'line',
+  data:{labels:months,datasets:Object.keys(series).map(id=>({label:SCORE_NAME[id].replace(' signal',''),data:series[id],borderColor:TC[id],backgroundColor:TC[id],tension:.35,pointRadius:2,pointHoverRadius:5,borderWidth:2,fill:false,hidden:id==='flood'}))
+   .concat([{label:'Normal',data:months.map(()=>50),borderColor:'rgba(255,255,255,.3)',borderDash:[4,4],borderWidth:1,pointRadius:0,fill:false}])},
+  options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},
+   plugins:{legend:{labels:{color:'#cbd5e1',font:tickFont,boxWidth:10,filter:i=>i.text!=='Normal'}},tooltip:{filter:i=>i.dataset.label!=='Normal'}},
+   scales:{x:{ticks:{color:tickCol,font:tickFont,maxRotation:0,autoSkipPadding:6},grid:{display:false}},y:{min:0,max:100,ticks:{color:tickCol,font:tickFont,stepSize:25},grid:{color:'rgba(130,180,200,.08)'}}}}
+ });
+
+ // Contribution: share of current anomaly strength |z|; clicking a slice opens that driver
+ const keys=Object.keys(DRV_NAME).filter(k=>CD[k]);
+ const mags=keys.map(k=>Math.abs(latestZ(k))),tot=mags.reduce((a,b)=>a+b,0)||1;
+ new Chart(document.getElementById('pie'),{
+  type:'doughnut',
+  data:{labels:keys.map(k=>DRV_NAME[k]),datasets:[{data:mags.map(m=>Math.round(m/tot*1000)/10),backgroundColor:keys.map(k=>pts3d[k].color),borderColor:'#0a1622',borderWidth:2,hoverOffset:8}]},
+  options:{responsive:true,maintainAspectRatio:false,cutout:'62%',
+   onClick:(e,els)=>{if(els.length)activateDriver(keys[els[0].index]);},
+   onHover:(e,els)=>{e.native.target.style.cursor=els.length?'pointer':'default';},
+   plugins:{legend:{position:'right',labels:{color:'#cbd5e1',font:tickFont,boxWidth:10,padding:6}},
+    tooltip:{callbacks:{label:c=>' '+c.label+': '+c.parsed+'% (z '+fz(latestZ(keys[c.dataIndex]))+')'}}}}
+ });
+
+ // Forecast horizon tiles: live status of their drivers; click opens the lead driver
+ document.querySelectorAll('.horizon').forEach(t=>{
+  const ks=t.dataset.drivers.split(','),st=t.querySelector('.hstat');
+  st.textContent=ks.map(k=>k==='jet'?'Jet live':DRV_NAME[k].split(' ')[0]+' '+fz(latestZ(k))).join(' · ');
+  t.onclick=()=>activateDriver(ks[0]);
+ });
+}else{
+ for(const id in SCORE_W)document.getElementById('sub_'+id).textContent='No data file yet. Run "python update_data.py".';
+}
+
+function tick(){
+ const d=new Date(); const utc=d.getTime()+d.getTimezoneOffset()*60000; const pk=new Date(utc+5*3600000);
+ document.getElementById('clock').textContent=pk.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',second:'2-digit'})+' PKT';
+}
+tick();setInterval(tick,1000);
+
+// ---- AI assistant: answers via portal_server.py (POST /api/chat, server-sent events) ----
+const ai={panel:document.getElementById('aiPanel'),log:document.getElementById('aiLog'),form:document.getElementById('aiForm'),input:document.getElementById('aiInput'),send:document.getElementById('aiSend'),btn:document.getElementById('aiBtn'),history:[],busy:false};
+const aiIntro=ai.log.innerHTML;
+// Two assistants share one conversation; the choice is remembered in this browser. Each one runs through
+// portal_server.py when that AI's API key is set there, and otherwise free through Puter (no key needed).
+const AI_NAMES={grok:'Grok',claude:'Claude'};
+const PUTER_MODELS={grok:'x-ai/grok-4.7',claude:'claude-sonnet-5'};
+ai.keys={grok:false,claude:false}; // filled from /api/ai-status
+const aiViaPuter=()=>!ai.keys[ai.provider];
+const aiLabel=()=>AI_NAMES[ai.provider]+(aiViaPuter()?' · free via Puter':'');
+ai.provider=(()=>{try{const v=localStorage.getItem('pkAiProvider');return AI_NAMES[v]?v:'grok';}catch(e){return 'grok';}})();
+function aiSetProvider(p){ai.provider=p;try{localStorage.setItem('pkAiProvider',p);}catch(e){}
+ document.querySelectorAll('.aiSwitch button').forEach(b=>{const on=b.dataset.provider===p;b.classList.toggle('on',on);b.setAttribute('aria-checked',on);});
+ document.getElementById('aiSub').textContent='Answers from this portal\'s data · '+aiLabel();
+ if(aiViaPuter()&&ai.panel.classList.contains('on'))puterPrepare().catch(()=>{});}
+document.querySelectorAll('.aiSwitch button').forEach(b=>b.addEventListener('click',()=>{if(!ai.busy)aiSetProvider(b.dataset.provider);}));
+aiSetProvider(ai.provider);
+fetch('/api/ai-status').then(r=>r.ok?r.json():null).then(s=>{if(s){ai.keys={grok:!!s.grok,claude:!!s.claude};aiSetProvider(ai.provider);}}).catch(()=>{});
+function aiOpen(v){ai.panel.classList.toggle('on',v);document.body.classList.toggle('aiOpen',v);if(v&&aiViaPuter())puterPrepare().catch(()=>{});ai.panel.setAttribute('aria-hidden',!v);ai.btn.classList.toggle('on',v);if(v)setTimeout(()=>ai.input.focus(),250);}
+ai.btn.addEventListener('click',()=>aiOpen(!ai.panel.classList.contains('on')));
+document.getElementById('aiFab').addEventListener('click',()=>aiOpen(true));
+document.getElementById('aiClose').addEventListener('click',()=>aiOpen(false));
+document.getElementById('aiClear').addEventListener('click',()=>{if(ai.busy)return;ai.history=[];ai.log.innerHTML=aiIntro;bindChips();});
+addEventListener('keydown',e=>{if(e.key==='Escape'&&!dvm.classList.contains('on'))aiOpen(false);});
+function bindChips(){ai.log.querySelectorAll('.aiChips button').forEach(b=>b.onclick=()=>aiAsk(b.textContent));}
+bindChips();
+ai.input.addEventListener('input',()=>{ai.input.style.height='auto';ai.input.style.height=Math.min(110,ai.input.scrollHeight)+'px';});
+ai.input.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();ai.form.requestSubmit();}});
+ai.form.addEventListener('submit',e=>{e.preventDefault();aiAsk(ai.input.value);});
+
+// Minimal, safe markdown: escape everything, then paragraphs, "-" / "1." lists, **bold**, `code`.
+function aiMd(src){
+ const esc=s=>s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+ const inl=s=>esc(s).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/`([^`]+)`/g,'<code>$1</code>');
+ let out='',list=false;
+ for(const raw of src.split('\n')){
+  const line=raw.trim(),m=line.match(/^(?:[-*•]|\d+[.)])\s+(.*)/);
+  if(m){if(!list){out+='<ul>';list=true;}out+='<li>'+inl(m[1])+'</li>';continue;}
+  if(list){out+='</ul>';list=false;}
+  if(line)out+='<p>'+inl(line.replace(/^#+\s*/,''))+'</p>';
+ }
+ return out+(list?'</ul>':'');
+}
+function aiBubble(cls,html){const d=document.createElement('div');d.className='aiMsg '+cls;d.innerHTML=html;ai.log.appendChild(d);ai.log.scrollTop=ai.log.scrollHeight;return d;}
+
+// What the user is looking at right now, so answers match the screen.
+function aiSnapshot(){
+ const txt=id=>(document.getElementById(id)||{}).textContent||'';
+ const scores={};for(const id in SCORE_NAME)scores[SCORE_NAME[id]]={score:txt('sc_'+id),status:txt('sub_'+id)};
+ const js=jetSeries();
+ return {
+  date:new Date().toISOString().slice(0,10),time_pkt:txt('clock'),view:mode3d?'3D globe':terrainOn?'3D terrain':'2D map',forecast_window_open:mb.modal.classList.contains('on'),forecast_map:mb.modal.classList.contains('on')&&document.querySelector('.fcView[data-view="map"]').classList.contains('on')&&pk.data?{day:pk.data.days[pk.day],showing:PK_VARS[pk.v].label,top_districts:pkDistrictTable().slice(0,8).map(x=>({district:x.name,province:x.province,value:Math.round(x.value*10)/10})),city_values:Object.fromEntries(FC_CITIES.map(c=>[c.n,pkCityValue(c)]).filter(([,v])=>v!=null).map(([n,v])=>[n,Math.round(v*10)/10]))}:null,forecast_shown:mb.modal.classList.contains('on')&&mb.data?{city:mb.data.city,now:{temp_c:mb.data.current.temperature_2m,feels_c:mb.data.current.apparent_temperature,sky:wmo(mb.data.current.weather_code,mb.data.current.is_day)[1],wind_kmh:mb.data.current.wind_speed_10m,gust_kmh:mb.data.current.wind_gusts_10m,humidity_pct:mb.data.current.relative_humidity_2m},days:mb.data.daily.time.map((t,i)=>({date:t,sky:wmo(mb.data.daily.weather_code[i])[1],max_c:mb.data.daily.temperature_2m_max[i],min_c:mb.data.daily.temperature_2m_min[i],rain_mm:mb.data.daily.precipitation_sum[i],rain_chance_pct:mb.data.daily.precipitation_probability_max[i],wind_max_kmh:mb.data.daily.wind_speed_10m_max[i],uv:mb.data.daily.uv_index_max[i]})),air_quality_now:mb.air||null,source:'Open-Meteo (weather), CAMS (air)'}:null,
+  active_layer:txt('activeTitle').replace('Active layer: ',''),map_layer_source:txt('liveSrc'),
+  driver_card_open:dvm.classList.contains('on')?txt('dvmTitle'):null,
+  influence_scores:scores,
+  forecast_horizon:[...document.querySelectorAll('.horizon')].map(t=>t.querySelector('.muted').textContent+' '+t.querySelector('b').textContent+': '+t.querySelector('.hstat').textContent),
+  jet_stream_live:js?{data_date:js.through,peak_wind_ms:Math.max(...js.values),peak_at:js.labels[js.values.indexOf(Math.max(...js.values))]}:'live GFS wind data not loaded yet',
+  data_file_updated:typeof CLIMATE_DATA!=='undefined'?CLIMATE_DATA.updated:'missing - run python update_data.py'
+ };
+}
+
+// Claude and Grok answer through portal_server.py (server-sent events); onText receives the text so far.
+// Returns an error message, or null.
+async function aiAskServer(onText){
+ let text='',failed=null;
+ const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({provider:ai.provider,messages:ai.history,page:aiSnapshot()})});
+ if(!r.ok)throw new Error(r.status===404||r.status===501?'The assistant needs the portal server. Start it with "python portal_server.py" and reload this page.':'Server error '+r.status);
+ const rd=r.body.getReader(),dec=new TextDecoder();let buf='';
+ for(;;){
+  const {value,done}=await rd.read();if(done)break;
+  buf+=dec.decode(value,{stream:true});
+  let i;while((i=buf.indexOf('\n\n'))>=0){
+   const evt=buf.slice(0,i);buf=buf.slice(i+2);
+   const kind=(evt.match(/^event: (.*)$/m)||[])[1],data=(evt.match(/^data: (.*)$/m)||[])[1];
+   if(data===undefined)continue;const val=JSON.parse(data);
+   if(kind==='text'){text+=val;onText(text);}
+   else if(kind==='error')failed=val;
+  }
+ }
+ return failed;
+}
+async function aiAsk(q){
+ q=(q||'').trim();if(!q||ai.busy)return;
+ ai.busy=true;ai.send.disabled=true;ai.input.value='';ai.input.style.height='auto';
+ const chips=ai.log.querySelector('.aiChips');if(chips)chips.remove();
+ aiBubble('user',aiMd(q));ai.history.push({role:'user',content:q});
+ const who=aiLabel(),out=aiBubble('bot typing','');out.dataset.who=who;let text='',failed=null;
+ const onText=t=>{text=t;out.innerHTML='<span class="aiWho">'+who+'</span>'+aiMd(text);ai.log.scrollTop=ai.log.scrollHeight;};
+ try{
+  if(aiViaPuter())await aiAskPuter(onText);
+  else failed=await aiAskServer(onText);
+ }catch(e){failed=e.message==='Failed to fetch'?'Cannot reach the portal server. Start it with "python portal_server.py".':e.message;}
+ out.classList.remove('typing');
+ if(text)ai.history.push({role:'assistant',content:text});
+ else{ai.history.pop();out.remove();}
+ if(failed)aiBubble('bot err',aiMd('⚠ '+failed));
+ ai.busy=false;ai.send.disabled=false;ai.input.focus();
+}
+
+// ---- Free route: Grok or Claude through Puter.js (developer.puter.com). No key: each user signs in to their
+// own Puter account, which pays for usage. The script loads only when this route is first needed. ----
+var puterGuide=null; // var: used by aiSetProvider at load, before this line runs
+// Loaded as soon as a Puter-routed AI is chosen, so at Send time puter.ai.chat runs straight from the click and the
+// browser allows Puter's sign-in window (pop-ups opened later, after other awaits, are often blocked).
+var puterReady=null,puterScript=null;
+function puterPrepare(){
+ // the script must be added only once (it registers custom elements), even if a later step fails and is retried
+ if(!puterScript)puterScript=window.puter?Promise.resolve():loadAsset('script',{src:'https://js.puter.com/v2/'}).catch(e=>{puterScript=null;throw e;}); // a failed download (e.g. offline) can be retried
+ if(!puterReady)puterReady=Promise.all([
+  puterScript,
+  fetch('/api/guide').then(r=>{if(!r.ok)throw 0;return r.json();}).then(js=>{puterGuide=js.text;}) // same instructions + data Claude and Grok get
+   .catch(()=>{puterGuide='You are the assistant of the Pakistan Climate Driver Intelligence dashboard. Answer only from this data, quoting values with units and months:\n'+JSON.stringify(typeof CLIMATE_DATA!=='undefined'?CLIMATE_DATA:{});})
+ ]).catch(e=>{puterReady=null;throw e;});
+ return puterReady;
+}
+async function aiAskPuter(onText){
+ if(!window.puter||!puterGuide)await puterPrepare();
+ const hist=ai.history.slice(-20).map(m=>({role:m.role,content:m.content}));
+ hist[hist.length-1]={role:'user',content:'<page_snapshot>'+JSON.stringify(aiSnapshot())+'</page_snapshot>\n\n'+hist[hist.length-1].content};
+ let text='';
+ try{
+  const resp=await puter.ai.chat([{role:'system',content:puterGuide},...hist],false,{model:PUTER_MODELS[ai.provider],stream:true});
+  for await(const part of resp){if(part&&part.text){text+=part.text;onText(text);}}
+ }catch(e){throw new Error('Puter: '+((e&&(e.message||e.error&&e.error.message))||'request failed or sign-in was closed')+'. Try again, or switch between Grok and Claude.');}
+ return text;
+}
+
+(function animate(){requestAnimationFrame(animate);if(mode3d&&t3){globeStep();if(!t3.drag&&t3.spin!==false)t3.earth.rotation.y+=.0016;t3.atmo.forEach(m=>m.material.color.lerp(t3.tint,.07));windFrame3();if(t3.hubGlow)t3.hubGlow.material.opacity=.55+.35*Math.sin(performance.now()*.004);updateLabels3d();t3.rd.render(t3.s,t3.cam)}})();
+</script>
+</body>
+</html>

@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pakistan Climate Portal · UI Prototypes</title>
+<style>
+ :root{--bg:#060b16;--card:#0d1626;--line:rgba(148,163,184,.18);--ink:#eef4f8;--dim:#b6c4d0;--accent:#38bdf8}
+ *{box-sizing:border-box}
+ body{margin:0;background:var(--bg);color:var(--ink);font-family:Inter,Segoe UI,Arial,sans-serif;line-height:1.5}
+ header{max-width:1240px;margin:0 auto;padding:36px 20px 10px}
+ h1{margin:0 0 6px;font-size:26px}
+ header p{margin:0;color:var(--dim);max-width:760px}
+ main{max-width:1240px;margin:0 auto;padding:18px 20px 40px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}
+ .card{display:flex;flex-direction:column;background:var(--card);border:1px solid var(--line);border-radius:16px;overflow:hidden;color:inherit;text-decoration:none;transition:border-color .2s,transform .2s}
+ .card:hover{border-color:var(--accent);transform:translateY(-2px)}
+ .card img{display:block;width:100%;aspect-ratio:16/9;object-fit:cover;border-bottom:1px solid var(--line)}
+ .body{padding:14px 16px 16px;display:flex;flex-direction:column;gap:6px;flex:1}
+ .tag{align-self:flex-start;font-size:10.5px;font-weight:800;letter-spacing:1px;text-transform:uppercase;padding:3px 9px;border-radius:999px;background:rgba(56,189,248,.14);color:var(--accent)}
+ .tag.orig{background:rgba(148,163,184,.16);color:var(--dim)}
+ h2{margin:0;font-size:18px}
+ .body p{margin:0;color:var(--dim);font-size:13.5px}
+ ul{margin:2px 0 0;padding-left:18px;color:var(--dim);font-size:13px}
+ .open{margin-top:auto;padding-top:8px;font-weight:700;color:var(--accent);font-size:13.5px}
+ footer{max-width:1240px;margin:0 auto;padding:0 20px 36px;color:var(--dim);font-size:12.5px}
+ code{background:rgba(255,255,255,.07);padding:1px 6px;border-radius:5px}
+ @media(max-width:820px){main{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header>
+ <h1>UI prototypes</h1>
+ <p>Three new designs for the Pakistan Climate portal, next to the original. Every prototype is fully working, with the same data, AI assistant, forecasts, air quality, districts and 3D views; only the look and layout differ. Open each one and compare.</p>
+</header>
+<main>
+ <a class="card" href="Pak%20Climate.html">
+  <img src="prototypes/shot_original.jpg" alt="Original portal">
+  <div class="body"><span class="tag orig">Original · unchanged</span><h2>Current portal</h2>
+   <p>The portal as it is today: floating dark glass panels on both sides, driver tabs along the bottom.</p>
+   <span class="open">Open original →</span></div>
+ </a>
+ <a class="card" href="Prototype%20A%20-%20Command%20Center.html">
+  <img src="prototypes/shot_A.jpg" alt="Prototype A, Command Center">
+  <div class="body"><span class="tag">Prototype A</span><h2>Command Center</h2>
+   <p>A control-room dashboard in navy and teal.</p>
+   <ul><li>Slim full-width top bar</li><li>Drivers as a vertical rail on the left</li><li>Panels docked edge to edge, so nothing floats over the map</li></ul>
+   <span class="open">Open Prototype A →</span></div>
+ </a>
+ <a class="card" href="Prototype%20B%20-%20Clean%20Light.html">
+  <img src="prototypes/shot_B.jpg" alt="Prototype B, Clean Light">
+  <div class="body"><span class="tag">Prototype B</span><h2>Clean Light</h2>
+   <p>A bright, airy theme with blue accents.</p>
+   <ul><li>White cards with soft shadows and a light map</li><li>Dark text and darker chart lines for easy reading</li><li>Good for presentations, projectors and printing</li></ul>
+   <span class="open">Open Prototype B →</span></div>
+ </a>
+ <a class="card" href="Prototype%20C%20-%20Immersive%20Map.html">
+  <img src="prototypes/shot_C.jpg" alt="Prototype C, Immersive Map">
+  <div class="body"><span class="tag">Prototype C</span><h2>Immersive Map</h2>
+   <p>The map takes the whole screen, with Pakistan-green accents.</p>
+   <ul><li>Floating pill-shaped top bar and driver chips</li><li>Side panels slide in as drawers: <b>INDICES</b> tab on the left, <b>INSIGHTS</b> on the right</li><li>Best for exploring the map, wind and 3D views</li></ul>
+   <span class="open">Open Prototype C →</span></div>
+ </a>
+</main>
+<footer>
+ The prototypes are generated from the original page, so they stay in step with it. After changing the original, rebuild them with <code>python prototypes/build_prototypes.py</code>. Each design lives in its own style sheet in the <code>prototypes</code> folder.
+</footer>
+</body>
+</html>

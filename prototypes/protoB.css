@@ -1,0 +1,40 @@
+/* Prototype B - Clean Light: white cards, soft shadows, light map, blue accents. */
+:root{
+ --accent:#2563eb; --accent-soft:rgba(37,99,235,.10); --accent-line:rgba(37,99,235,.45);
+ --surface:rgba(255,255,255,.95); --surface-2:rgba(15,23,42,.035); --surface-3:rgba(15,23,42,.07);
+ --border:rgba(15,23,42,.10); --border-strong:rgba(15,23,42,.2);
+ --ink:#0f172a; --ink-dim:#475569; --muted:#475569; --text:#0f172a;
+ --glass-fill:var(--surface); --glass-blur:blur(14px); --glass-shadow:0 10px 30px rgba(15,23,42,.10),0 1px 2px rgba(15,23,42,.06);
+}
+body{background:#eef2f7;color:#0f172a}
+#map,#pkMap{background:#e8edf3}
+.title{color:#0f172a}
+.subtitle,.small,.muted,.stamp,.hstat,.dvmSub,.dvmCap,.dvmKpi .k,.dvmKpi .s,.aiSub,.fcDesc span,.fcStats,.fcDay,.fcAir,.mbCredit,.pkRank,.pkLegend{color:#475569}
+.topbar,.left,.card,.bottombar,.maplabel,.dvmCard,#aiPanel,#terrainNav,#globeNav,#toast{color:#0f172a}
+.brandmark{background:linear-gradient(135deg,#3b82f6,#1d4ed8);border-color:rgba(37,99,235,.4)}
+.pill{color:#334155;background:#fff}
+.live{color:#16a34a}
+.driver-head,.dvmTitle,.dvmKpi .v,.horizon b,.fcBig .t,.fcDesc b,.fcStats b,.fcDay .d,.fcDay .hl,.fcAir .cat b,.fcAir .st b,
+.aiTitle,.aiMsg,.aiMsg b,.pkRank b,.pkRank li span,.bottombar .layer,.bottombar .layer.active .layername,.fcBig .t small{color:#0f172a}
+.viewbtn.on,.mbCities button.on,.fcTabs button.on,.fcSeg button.on,#terrainNav button.on,#globeNav button.on,.aibtn{color:#0f172a}
+.aibtn{background:var(--accent);color:#fff;border-color:var(--accent)}
+#aiFab,#aiSend{color:#fff}
+.bottombar .layer.active .icon{color:#fff}
+.dvmCard,#aiPanel{background:rgba(255,255,255,.98)}
+.aiMsg.user{color:#0f172a}
+#aiInput,.fcSearch input{background:#fff;color:#0f172a}
+.pkInfo,.pkLegend,.pkRank{background:rgba(255,255,255,.94);color:#334155}
+.pkInfo b{color:#0f172a}
+.pkCity{color:#0f172a;text-shadow:0 0 3px #fff,0 0 6px #fff,0 0 10px #fff}
+.pkCity small{color:#334155}
+.tCity{background:rgba(255,255,255,.92);color:#0f172a}
+.tCity .tt{color:#475569}
+.leaflet-control-attribution{background:rgba(255,255,255,.85)!important;color:#334155!important}
+.leaflet-control-attribution a{color:#1d4ed8!important}
+#mbModal,#drvModal{background:rgba(15,23,42,.35)}
+.dvmEmpty{color:#475569}
+.fcDay.today{background:var(--accent-soft)}
+#dvmClose,.aiIcon{color:#0f172a}
+.pkTip{background:#fff;color:#0f172a}
+/* the Winter series is light grey in the dark original; use a darker slate on white */
+#row_winter{--c:#64748b}

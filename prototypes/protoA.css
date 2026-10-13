@@ -1,0 +1,32 @@
+/* Prototype A - Command Center: slim full-width top bar, drivers as a vertical rail, docked panels. Navy + teal. */
+:root{
+ --accent:#2dd4bf; --accent-soft:rgba(45,212,191,.15); --accent-line:rgba(45,212,191,.55);
+ --surface:rgba(9,15,28,.95); --surface-2:rgba(255,255,255,.035); --surface-3:rgba(255,255,255,.07);
+ --border:rgba(148,163,184,.16); --border-strong:rgba(148,163,184,.3);
+}
+body{background:#060b16}
+/* top bar: edge to edge */
+.topbar{left:0;right:0;top:0;height:54px;border-radius:0;border-width:0 0 1px;padding:6px 16px;backdrop-filter:none;background:rgba(7,12,24,.97)}
+.brandmark{width:36px;height:36px;font-size:14px;border-radius:10px;background:linear-gradient(135deg,#14b8a6,#0e7490)}
+.title{font-size:15px;letter-spacing:.4px}
+.subtitle{font-size:9.5px}
+.pill{border-radius:8px}
+/* drivers: vertical rail on the far left */
+.bottombar{left:0;top:54px;bottom:0;right:auto;width:108px;border-radius:0;border-width:0 1px 0 0;padding:8px 6px;background:rgba(7,12,24,.97)}
+.bbtrack{flex-direction:column;overflow-x:hidden;overflow-y:auto;height:100%;padding:0 2px;gap:6px}
+.bottombar .layer{width:100%;min-height:74px;padding:8px 4px;font-size:10.5px;gap:5px;border-radius:12px}
+.bottombar .icon{width:32px;height:32px;font-size:15px}
+.bottombar .layer:hover{transform:none}
+.bottombar .layer.active{box-shadow:inset 3px 0 0 var(--accent)}
+/* panels docked against the rail and the right edge */
+.left{left:118px;top:64px;bottom:12px;width:256px;border-radius:12px}
+.right{top:64px;bottom:12px;right:12px}
+.card{border-radius:12px}
+.maplabel{top:64px}
+#terrainNav,#globeNav{top:98px}
+/* map controls clear of the right column */
+.leaflet-bottom.leaflet-right{right:352px}
+#aiFab{right:400px;bottom:24px}
+#terrain3d .mapboxgl-ctrl-bottom-left{left:386px;bottom:20px}
+#aiPanel{top:64px;bottom:12px;right:12px;border-radius:12px}
+@media(max-width:1100px){.left{left:118px;width:220px}.leaflet-bottom.leaflet-right{right:312px}#aiFab{right:360px}}
