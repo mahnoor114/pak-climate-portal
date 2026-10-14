@@ -139,4 +139,5 @@ async def static(path: str, request: Request):
 
 
 if __name__ == '__main__':
-    uvicorn.run(app, host='127.0.0.1', port=core.PORT, log_level='warning', access_log=False)
+    # 0.0.0.0 = reachable from other PCs on the network (http://<this PC's IP>:8000). Set PORTAL_HOST=127.0.0.1 for this PC only.
+    uvicorn.run(app, host=os.environ.get('PORTAL_HOST', '0.0.0.0'), port=core.PORT, log_level='warning', access_log=False)
