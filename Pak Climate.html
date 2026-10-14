@@ -379,6 +379,7 @@ body.showRight .leaflet-bottom.leaflet-right{right:342px}
 #mbModal .fcView.on{flex:1;min-height:0}
 #mbModal .pkMapWrap{flex:1;height:auto;min-height:360px}
 #mbModal .pkLegend{bottom:12px;right:auto;left:12px} /* bottom-left: clear of the map credits in the bottom-right */#mbModal .leaflet-control-attribution{display:none} /* credits moved to the footer line under the map */
+#pkRank{display:none} /* 'Highest districts' box removed from the forecast map */
 </style>
 </head>
 <body>
@@ -1608,8 +1609,6 @@ function pkDraw(){
  pk.labels.clearLayers();
  FC_CITIES.forEach(c=>{const v=pkCityValue(c);if(v==null)return;
   L.marker([c.ll[1],c.ll[0]],{interactive:false,pane:'pkTop',icon:L.divIcon({className:'',html:'<div class="pkCity">'+V.fmt(v)+'<br><small>'+c.n+'</small></div>',iconSize:[0,0]})}).addTo(pk.labels);});
- // district ranking: highest district averages for this variable and day
- pkRankDistricts();
  // legend
  const st=V.ramp;document.getElementById('pkLegend').innerHTML='<b style="color:var(--ink)">'+V.label+(V.note?' ('+V.note+')':'')+' · '+document.querySelector('#pkDays .on').textContent+'</b>'+
   '<div class="bar" style="background:linear-gradient(90deg,'+st.map(([v,c],i)=>c+' '+(i/(st.length-1)*100)+'%').join(',')+')"></div>'+
