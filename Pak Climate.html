@@ -378,7 +378,8 @@ body.showRight .leaflet-bottom.leaflet-right{right:342px}
 #mbModal .mbCard{width:100vw;height:100vh;max-height:none;border-radius:0;border:0}
 #mbModal .fcView.on{flex:1;min-height:0}
 #mbModal .pkMapWrap{flex:1;height:auto;min-height:360px}
-#mbModal .pkLegend{bottom:12px;right:auto;left:12px} /* bottom-left: clear of the map credits in the bottom-right */</style>
+#mbModal .pkLegend{bottom:12px;right:auto;left:12px} /* bottom-left: clear of the map credits in the bottom-right */#mbModal .leaflet-control-attribution{display:none} /* credits moved to the footer line under the map */
+</style>
 </head>
 <body>
 <div id="map"></div>
@@ -491,7 +492,7 @@ body.showRight .leaflet-bottom.leaflet-right{right:342px}
    </div>
   </div>
   </div>
-  <div class="mbCredit">Weather data: <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a> · air quality: Copernicus CAMS · model forecasts, not official warnings (see PMD for alerts) · <span id="fcUpdated"></span></div>
+  <div class="mbCredit">Weather data: <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a> · air quality: Copernicus CAMS · map © <a href="https://www.mapbox.com/about/maps/" target="_blank" rel="noopener">Mapbox</a> © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> · model forecasts, not official warnings (see PMD for alerts) · <span id="fcUpdated"></span></div>
  </div>
 </div>
 
