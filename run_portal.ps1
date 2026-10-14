@@ -3,9 +3,10 @@ Runs the Pakistan Climate portal and keeps it running.
 
   - Copies the portal from this folder (the master copy, on the network drive) to a local working copy in
     %LOCALAPPDATA%\PakClimatePortal\app and runs it from there, so a slow or stalled network drive can't
-    freeze startup or page loads. Changes made here are copied over every 10 minutes; if portal_server.py
+    freeze startup or page loads. Changes made here are copied over every 10 minutes; if the server code
     itself changed, the server restarts. If the network drive is down, the last local copy keeps running.
-  - Starts portal_server.py (which itself refreshes wind every 6 h and climate data daily).
+  - Starts the FastAPI server, portal_api.py (it refreshes wind/weather every 8 h, air quality 12 h, climate data daily);
+    if FastAPI is not installed it falls back to the built-in server, portal_server.py.
   - Checks every minute that the portal answers; restarts it if it crashed or stopped responding.
   - Writes logs to %LOCALAPPDATA%\PakClimatePortal\logs (server output per start, plus watchdog.log);
     deletes logs older than 14 days.
@@ -41,10 +42,11 @@ function Remove-OldLogs {
 
 # Copy files that are newer in the master copy. /XO never overwrites a newer local file, so data the server
 # refreshed locally (lib\indices.js) is kept. Runs with a time limit so a stalled drive can't hang the watchdog.
-# Returns $true if portal_server.py changed.
+# Returns $true if the server code (portal_server.py, portal_api.py, portal_db.py) changed.
 function Sync-App {
-    $serverFile = Join-Path $App 'portal_server.py'
-    $before = if (Test-Path $serverFile) { (Get-Item $serverFile).LastWriteTimeUtc } else { $null }
+    $codeFiles = 'portal_server.py', 'portal_api.py', 'portal_db.py' | ForEach-Object { Join-Path $App $_ }
+    $stamp = { ($codeFiles | Where-Object { Test-Path $_ } | ForEach-Object { (Get-Item $_).LastWriteTimeUtc.Ticks }) -join ',' }
+    $before = & $stamp
     $rc = Start-Process -FilePath robocopy.exe -WindowStyle Hidden -PassThru -ArgumentList @(
         "`"$Source`"", "`"$App`"", '/E', '/XO', '/R:1', '/W:2', '/NFL', '/NDL', '/NJH', '/NJS', '/NP',
         '/XD', 'logs', 'backups', '.git', '__pycache__',
@@ -55,8 +57,8 @@ function Sync-App {
         return $false
     }
     if ($rc.ExitCode -ge 8) { Write-Log "Copy from the network drive failed (robocopy code $($rc.ExitCode)); running the last local copy." }
-    $after = if (Test-Path $serverFile) { (Get-Item $serverFile).LastWriteTimeUtc } else { $null }
-    return ($before -and $after -and $after -ne $before)
+    $after = & $stamp
+    return ($before -and $after -ne $before)
 }
 
 # "python" on PATH, else the Windows "py" launcher.
@@ -91,11 +93,14 @@ while ($true) {
         if ($server) { Write-Log "Server stopped (exit code $($server.ExitCode)); restarting in 10 s."; Start-Sleep 10 }
         Remove-OldLogs
         $stamp = Get-Date -Format 'yyyyMMdd_HHmmss'
-        $server = Start-Process -FilePath $Python -ArgumentList '-u', 'portal_server.py' -WorkingDirectory $App `
+        # FastAPI app when available, else the standard-library server
+        & $Python -c "import fastapi, uvicorn" 2>$null
+        $entry = if ($LASTEXITCODE -eq 0 -and (Test-Path (Join-Path $App 'portal_api.py'))) { 'portal_api.py' } else { 'portal_server.py' }
+        $server = Start-Process -FilePath $Python -ArgumentList '-u', $entry -WorkingDirectory $App `
             -WindowStyle Hidden -PassThru `
             -RedirectStandardOutput (Join-Path $LogDir "server_$stamp.log") `
             -RedirectStandardError  (Join-Path $LogDir "server_$stamp.err.log")
-        Write-Log "Server started (PID $($server.Id))."
+        Write-Log "Server started: $entry (PID $($server.Id))."
         $failedChecks = 0
         Start-Sleep 20
     }
@@ -116,7 +121,7 @@ while ($true) {
     if (((Get-Date) - $lastSync).TotalMinutes -ge 10) {
         $lastSync = Get-Date
         if (Sync-App) {
-            Write-Log 'portal_server.py changed in the master copy; restarting the server to use it.'
+            Write-Log 'Server code changed in the master copy; restarting the server to use it.'
             Stop-Process -Id $server.Id -Force -ErrorAction SilentlyContinue
             $server.WaitForExit(10000) | Out-Null
         }

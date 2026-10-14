@@ -732,110 +732,119 @@ class Handler(SimpleHTTPRequestHandler):
             return
         try:
             body = json.loads(self.rfile.read(int(self.headers.get('Content-Length', 0))) or b'{}')
-            history = [m for m in body.get('messages', []) if m.get('role') in ('user', 'assistant') and isinstance(m.get('content'), str) and m['content'].strip()]
-            history = history[-MAX_HISTORY:]
-            while history and history[0]['role'] != 'user':
-                history.pop(0)
-            if not history or history[-1]['role'] != 'user':
-                raise ValueError('no question')
+            history = chat_history(body)
         except (ValueError, KeyError, TypeError):
             self.send_error(400, 'Expected {"messages": [...], "page": {...}}')
             return
-
-        # The live page snapshot changes on every question, so it goes in the newest user turn,
-        # after the cached system prompt.
-        page = json.dumps(body.get('page', {}), ensure_ascii=False)
-        history[-1] = {'role': 'user', 'content': f'<page_snapshot>{page}</page_snapshot>\n\n{history[-1]["content"]}'}
-
         self.send_response(200)
         self.send_header('Content-Type', 'text/event-stream; charset=utf-8')
         self.send_header('Cache-Control', 'no-cache')
         self.end_headers()
         try:
-            if body.get('provider') == 'grok':
-                self.answer_grok(history)
-            else:
-                self.answer_claude(history)
+            for kind, payload in chat_events(body.get('provider'), history):
+                self.send_event(kind, payload)
         except (BrokenPipeError, ConnectionResetError):
             pass  # browser closed the panel mid-answer
 
-    def answer_grok(self, history):
-        """Stream an answer from xAI's Grok (OpenAI-compatible chat completions, server-sent events)."""
-        key = os.environ.get('XAI_API_KEY')
-        if not key:
-            self.send_event('error', NO_XAI_KEY)
-            return
-        req = urllib.request.Request(
-            XAI_URL, method='POST',
-            data=json.dumps({'model': XAI_MODEL, 'stream': True, 'max_tokens': 4000,
-                             'messages': [{'role': 'system', 'content': PORTAL_GUIDE + load_data()}] + history}).encode('utf-8'),
-            headers={'Authorization': f'Bearer {key}', 'Content-Type': 'application/json', 'User-Agent': 'PakClimateDashboard/1.0'})
-        try:
-            with urllib.request.urlopen(req, timeout=120) as r:
-                for raw in r:
-                    line = raw.decode('utf-8').strip()
-                    if not line.startswith('data:'):
-                        continue
-                    data = line[5:].strip()
-                    if data == '[DONE]':
-                        break
-                    try:
-                        chunk = json.loads(data)
-                    except ValueError:
-                        continue
-                    for choice in chunk.get('choices', []):
-                        text = (choice.get('delta') or {}).get('content')
-                        if text:
-                            self.send_event('text', text)
-                        if choice.get('finish_reason') == 'length':
-                            self.send_event('text', '\n\n…(answer cut off - ask me to continue)')
-            self.send_event('done', '')
-        except urllib.error.HTTPError as e:
-            if e.code in (401, 403):
-                self.send_event('error', 'xAI rejected the Grok API key. Check XAI_API_KEY and restart portal_server.py.')
-            elif e.code == 429:
-                self.send_event('error', 'Grok: too many requests or out of credit - try again later.')
-            else:
-                detail = e.read().decode('utf-8', 'replace')[:200]
-                self.send_event('error', f'Grok API error {e.code}: {detail}')
-        except (urllib.error.URLError, TimeoutError) as e:
-            self.send_event('error', f'Could not reach the Grok API ({e}).')
 
-    def answer_claude(self, history):
-        try:
-            with client.beta.messages.stream(
-                model=MODEL,
-                max_tokens=16000,
-                output_config={'effort': 'medium'},
-                system=[{'type': 'text', 'text': PORTAL_GUIDE + load_data(), 'cache_control': {'type': 'ephemeral'}}],
-                messages=history,
-                betas=['server-side-fallback-2026-07-01'],
-                fallbacks='default',  # if Claude declines, the API retries on its recommended fallback model
-            ) as stream:
-                for text in stream.text_stream:
-                    self.send_event('text', text)
-                final = stream.get_final_message()
-            if final.stop_reason == 'refusal':
-                self.send_event('error', 'The assistant declined to answer that question.')
-            elif final.stop_reason == 'max_tokens':
-                self.send_event('text', '\n\n…(answer cut off - ask me to continue)')
-            self.send_event('done', '')
-        except anthropic.AuthenticationError:
-            self.send_event('error', NO_KEY)
-        except anthropic.RateLimitError:
-            self.send_event('error', 'Too many requests right now - try again in a minute.')
-        except anthropic.APIStatusError as e:
-            self.send_event('error', f'Claude API error {e.status_code}: {e.message}')
-        except anthropic.APIConnectionError:
-            self.send_event('error', 'Could not reach the Claude API - check the internet connection.')
-        except (BrokenPipeError, ConnectionResetError):
-            raise
-        except Exception as e:
-            # With no credentials at all, the SDK fails before sending the request.
-            self.send_event('error', NO_KEY if 'authentication' in str(e).lower() else f'Assistant unavailable: {e}')
+# ---- AI assistant (shared by this server and the FastAPI app in portal_api.py) ----
+
+def chat_history(body):
+    """Clean the browser's conversation and put the live page snapshot into the newest question.
+    Raises ValueError when there is no question to answer."""
+    history = [m for m in body.get('messages', []) if m.get('role') in ('user', 'assistant') and isinstance(m.get('content'), str) and m['content'].strip()]
+    history = history[-MAX_HISTORY:]
+    while history and history[0]['role'] != 'user':
+        history.pop(0)
+    if not history or history[-1]['role'] != 'user':
+        raise ValueError('no question')
+    # The live page snapshot changes on every question, so it goes in the newest user turn, after the cached system prompt.
+    page = json.dumps(body.get('page', {}), ensure_ascii=False)
+    history[-1] = {'role': 'user', 'content': f'<page_snapshot>{page}</page_snapshot>\n\n{history[-1]["content"]}'}
+    return history
 
 
-if __name__ == '__main__':
+def chat_events(provider, history):
+    """Yield (kind, payload) events: ('text', chunk) ... then ('done', '') or ('error', message)."""
+    yield from (answer_grok(history) if provider == 'grok' else answer_claude(history))
+
+
+def answer_grok(history):
+    """Stream an answer from xAI's Grok (OpenAI-compatible chat completions, server-sent events)."""
+    key = os.environ.get('XAI_API_KEY')
+    if not key:
+        yield 'error', NO_XAI_KEY
+        return
+    req = urllib.request.Request(
+        XAI_URL, method='POST',
+        data=json.dumps({'model': XAI_MODEL, 'stream': True, 'max_tokens': 4000,
+                         'messages': [{'role': 'system', 'content': PORTAL_GUIDE + load_data()}] + history}).encode('utf-8'),
+        headers={'Authorization': f'Bearer {key}', 'Content-Type': 'application/json', 'User-Agent': 'PakClimateDashboard/1.0'})
+    try:
+        with urllib.request.urlopen(req, timeout=120) as r:
+            for raw in r:
+                line = raw.decode('utf-8').strip()
+                if not line.startswith('data:'):
+                    continue
+                data = line[5:].strip()
+                if data == '[DONE]':
+                    break
+                try:
+                    chunk = json.loads(data)
+                except ValueError:
+                    continue
+                for choice in chunk.get('choices', []):
+                    text = (choice.get('delta') or {}).get('content')
+                    if text:
+                        yield 'text', text
+                    if choice.get('finish_reason') == 'length':
+                        yield 'text', '\n\n…(answer cut off - ask me to continue)'
+        yield 'done', ''
+    except urllib.error.HTTPError as e:
+        if e.code in (401, 403):
+            yield 'error', 'xAI rejected the Grok API key. Check XAI_API_KEY and restart the portal.'
+        elif e.code == 429:
+            yield 'error', 'Grok: too many requests or out of credit - try again later.'
+        else:
+            yield 'error', f'Grok API error {e.code}: {e.read().decode("utf-8", "replace")[:200]}'
+    except (urllib.error.URLError, TimeoutError) as e:
+        yield 'error', f'Could not reach the Grok API ({e}).'
+
+
+def answer_claude(history):
+    try:
+        with client.beta.messages.stream(
+            model=MODEL,
+            max_tokens=16000,
+            output_config={'effort': 'medium'},
+            system=[{'type': 'text', 'text': PORTAL_GUIDE + load_data(), 'cache_control': {'type': 'ephemeral'}}],
+            messages=history,
+            betas=['server-side-fallback-2026-07-01'],
+            fallbacks='default',  # if Claude declines, the API retries on its recommended fallback model
+        ) as stream:
+            for text in stream.text_stream:
+                yield 'text', text
+            final = stream.get_final_message()
+        if final.stop_reason == 'refusal':
+            yield 'error', 'The assistant declined to answer that question.'
+        elif final.stop_reason == 'max_tokens':
+            yield 'text', '\n\n…(answer cut off - ask me to continue)'
+        yield 'done', ''
+    except anthropic.AuthenticationError:
+        yield 'error', NO_KEY
+    except anthropic.RateLimitError:
+        yield 'error', 'Too many requests right now - try again in a minute.'
+    except anthropic.APIStatusError as e:
+        yield 'error', f'Claude API error {e.status_code}: {e.message}'
+    except anthropic.APIConnectionError:
+        yield 'error', 'Could not reach the Claude API - check the internet connection.'
+    except Exception as e:
+        # With no credentials at all, the SDK fails before sending the request.
+        yield 'error', NO_KEY if 'authentication' in str(e).lower() else f'Assistant unavailable: {e}'
+
+
+def start_background():
+    """Startup notes, database backfill of what is on disk, and the background refresh threads."""
     print(f'Portal: http://localhost:{PORT}/Pak%20Climate.html', flush=True)
     if not os.environ.get('ANTHROPIC_API_KEY'):
         print('Note: ANTHROPIC_API_KEY is not set - the Claude assistant will only work with an `ant auth login` profile.', flush=True)
@@ -850,8 +859,11 @@ if __name__ == '__main__':
             except (OSError, ValueError):
                 pass
         portal_db.enqueue('climate', json.loads(load_data()))
-    threading.Thread(target=_refresh_wind_forever, daemon=True).start()
-    threading.Thread(target=_refresh_climate_data_forever, daemon=True).start()
-    threading.Thread(target=_refresh_pak_grid_forever, daemon=True).start()
-    threading.Thread(target=_refresh_aq_forever, daemon=True).start()
+    for target in (_refresh_wind_forever, _refresh_climate_data_forever, _refresh_pak_grid_forever, _refresh_aq_forever):
+        threading.Thread(target=target, daemon=True).start()
+
+
+if __name__ == '__main__':
+    # Fallback server (Python standard library only). The portal normally runs on FastAPI: python portal_api.py
+    start_background()
     ThreadingHTTPServer(('127.0.0.1', PORT), Handler).serve_forever()
