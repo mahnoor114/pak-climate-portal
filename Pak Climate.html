@@ -373,7 +373,12 @@ body.showRight #drawerRight{right:350px}
 /* keep the floating buttons clear of an open drawer */
 body.showRight #aiFab{right:390px}
 body.showRight .leaflet-bottom.leaflet-right{right:342px}
-</style>
+/* Forecast window full screen: the Pakistan map fills all the space left under the controls */
+#mbModal{padding:0}
+#mbModal .mbCard{width:100vw;height:100vh;max-height:none;border-radius:0;border:0}
+#mbModal .fcView.on{flex:1;min-height:0}
+#mbModal .pkMapWrap{flex:1;height:auto;min-height:360px}
+#mbModal .pkLegend{bottom:12px;right:auto;left:12px} /* bottom-left: clear of the map credits in the bottom-right */</style>
 </head>
 <body>
 <div id="map"></div>
@@ -1531,7 +1536,7 @@ function pkRankDistricts(){
  box.innerHTML='<b>Highest districts</b> · '+V.label+'<ol>'+top.map(x=>'<li>'+x.name+' <small>('+x.province.replace(' Capital Territory','')+')</small> <span>'+V.fmt(x.value)+'</span></li>').join('')+'</ol>'+
   (cold?'<b>Coldest</b><ol>'+cold.map(x=>'<li>'+x.name+' <span>'+V.fmt(x.value)+'</span></li>').join('')+'</ol>':'');
 }function pkInit(){
- pk.map=L.map('pkMap',{zoomControl:true,attributionControl:true,minZoom:4,maxZoom:9}).fitBounds([[23.6,60.8],[37.1,77.9]]);
+ pk.map=L.map('pkMap',{zoomControl:true,attributionControl:true,minZoom:4,maxZoom:9,zoomSnap:.1,zoomDelta:.5}).fitBounds([[23.6,60.8],[37.1,77.9]]);
  L.tileLayer('https://api.mapbox.com/styles/v1/mapbox/dark-v11/tiles/512/{z}/{x}/{y}@2x?access_token='+MAPBOX_TOKEN,
   {tileSize:512,zoomOffset:-1,attribution:'&copy; Mapbox &copy; OpenStreetMap · Weather data: Open-Meteo'}).addTo(pk.map);
  pk.map.createPane('pkTop').style.zIndex=450;
@@ -1552,9 +1557,12 @@ function pkRankDistricts(){
  const ab=document.getElementById('pkAqVars');
  for(const k in PK_VARS){const b=document.createElement('button');b.type='button';b.textContent=PK_VARS[k].label;b.dataset.v=k;b.onclick=()=>{pk.v=k;pkDraw();};(PK_VARS[k].src==='aq'?ab:vb).appendChild(b);}
 }
+// Re-measure the map once the full-screen window has its final size, then frame all of Pakistan.
+function pkFit(){[60,350].forEach(ms=>setTimeout(()=>{if(!pk.map)return;pk.map.invalidateSize();pk.map.fitBounds([[23.6,60.8],[37.1,77.9]],{padding:[20,20]});},ms));}
+addEventListener('resize',()=>{if(pk.map&&mb.modal.classList.contains('on'))pkFit();});
 async function pkShow(){
  if(!pk.map)pkInit();
- setTimeout(()=>pk.map.invalidateSize(),50);
+ pkFit();
  if(!pk.aq||Date.now()-(pk.aqAt||0)>30*60000) // air quality loads alongside; a failure only affects the air views
   fetch('/api/aqmap').then(r=>r.ok?r.json():null).then(js=>{if(js){pk.aq=js;pk.aqAt=Date.now();pkDraw();}}).catch(()=>{});
  if(pk.data&&!pk.data.stale&&Date.now()-pk.loadedAt<30*60000){pkDraw();return;}
