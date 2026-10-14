@@ -18,6 +18,10 @@ Normally started hidden at Windows login by install_autostart.ps1. To run it by 
 param([switch]$OpenBrowser)
 
 $Source  = $PSScriptRoot                                        # master copy (network drive)
+# Background processes often can't see mapped drive letters (Z:), so copy from the share's real address.
+$drive = Split-Path -Qualifier $Source
+$unc = (Get-PSDrive ($drive.TrimEnd(':')) -ErrorAction SilentlyContinue).DisplayRoot
+if ($unc) { $Source = $unc + $Source.Substring($drive.Length) }
 $Base    = Join-Path $env:LOCALAPPDATA 'PakClimatePortal'
 $App     = Join-Path $Base 'app'                                # local working copy the server runs from
 $LogDir  = Join-Path $Base 'logs'                               # local: a stalled network drive must not block logging
@@ -47,7 +51,8 @@ function Sync-App {
     $codeFiles = 'portal_server.py', 'portal_api.py', 'portal_db.py' | ForEach-Object { Join-Path $App $_ }
     $stamp = { ($codeFiles | Where-Object { Test-Path $_ } | ForEach-Object { (Get-Item $_).LastWriteTimeUtc.Ticks }) -join ',' }
     $before = & $stamp
-    $rc = Start-Process -FilePath robocopy.exe -WindowStyle Hidden -PassThru -ArgumentList @(
+    $rcLog = Join-Path $LogDir 'last_copy.log'
+    $rc = Start-Process -FilePath robocopy.exe -WindowStyle Hidden -PassThru -RedirectStandardOutput $rcLog -ArgumentList @(
         "`"$Source`"", "`"$App`"", '/E', '/XO', '/R:1', '/W:2', '/NFL', '/NDL', '/NJH', '/NJS', '/NP',
         '/XD', 'logs', 'backups', '.git', '__pycache__',
         '/XF', '"groc api.txt"', '*.tmp', '*.zip', 'Pakistan_Districts.geojson')
@@ -56,7 +61,7 @@ function Sync-App {
         Write-Log 'Copy from the network drive timed out; running the last local copy.'
         return $false
     }
-    if ($rc.ExitCode -ge 8) { Write-Log "Copy from the network drive failed (robocopy code $($rc.ExitCode)); running the last local copy." }
+    if ($rc.ExitCode -ge 8) { Write-Log "Copy from the network drive failed (robocopy code $($rc.ExitCode), see last_copy.log); running the last local copy." }
     $after = & $stamp
     return ($before -and $after -ne $before)
 }
@@ -102,7 +107,7 @@ while ($true) {
             -RedirectStandardError  (Join-Path $LogDir "server_$stamp.err.log")
         Write-Log "Server started: $entry (PID $($server.Id))."
         $failedChecks = 0
-        Start-Sleep 20
+        Start-Sleep 90   # first start (libraries, data refresh threads) takes up to ~80 s
     }
 
     if (Test-Portal) {
