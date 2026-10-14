@@ -380,6 +380,10 @@ body.showRight .leaflet-bottom.leaflet-right{right:342px}
 #mbModal .pkMapWrap{flex:1;height:auto;min-height:360px}
 #mbModal .pkLegend{bottom:12px;right:auto;left:12px} /* bottom-left: clear of the map credits in the bottom-right */#mbModal .leaflet-control-attribution{display:none} /* credits moved to the footer line under the map */
 #pkRank{display:none} /* 'Highest districts' box removed from the forecast map */
+/* Forecast controls: every day / weather / air button the same size, in aligned columns */
+#mbModal .fcSeg{display:grid;grid-template-columns:repeat(7,150px);gap:8px}
+#mbModal .fcSeg button{width:150px;padding:7px 0;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+@media(max-width:1300px){#mbModal .fcSeg{grid-template-columns:repeat(7,128px)}#mbModal .fcSeg button{width:128px;font-size:10.5px}}
 </style>
 </head>
 <body>
