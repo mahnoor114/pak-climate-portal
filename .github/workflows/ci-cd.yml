@@ -1,7 +1,7 @@
 # CI/CD for the Pakistan Climate portal.
 #   CI  (GitHub's machines, every push and pull request): build the React frontend, check the Python server,
 #       and test that the server serves the built app.
-#   CD  (only pushes to main, after CI passes): a self-hosted runner on the portal PC updates the portal folder
+#   CD  (pushes to main and manual runs on main, after CI passes): a self-hosted runner on the portal PC updates the portal folder
 #       to the pushed commit, installs the built app and restarts the portal. Setup: see deploy_portal.ps1.
 name: CI/CD
 
@@ -56,7 +56,7 @@ jobs:
   deploy:
     name: Deploy to the portal PC
     needs: [frontend, backend]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'  # pushes and manual runs on main
     runs-on: [self-hosted, windows, portal]
     environment: production
     concurrency:
