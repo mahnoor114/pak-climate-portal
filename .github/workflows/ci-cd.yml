@@ -1,0 +1,77 @@
+# CI/CD for the Pakistan Climate portal.
+#   CI  (GitHub's machines, every push and pull request): build the React frontend, check the Python server,
+#       and test that the server serves the built app.
+#   CD  (only pushes to main, after CI passes): a self-hosted runner on the portal PC updates the portal folder
+#       to the pushed commit, installs the built app and restarts the portal. Setup: see deploy_portal.ps1.
+name: CI/CD
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  frontend:
+    name: Build frontend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci --no-audit --no-fund
+        working-directory: frontend
+      - run: npm run build
+        working-directory: frontend
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist
+          retention-days: 30
+
+  backend:
+    name: Test server
+    needs: frontend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+          cache: pip
+          cache-dependency-path: requirements*.txt
+      - run: pip install -r requirements.txt -r requirements-dev.txt
+      - name: Compile all Python files
+        run: python -m py_compile *.py
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+      - name: Serve the built app (tests/)
+        run: python -m pytest -q
+
+  deploy:
+    name: Deploy to the portal PC
+    needs: [frontend, backend]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, windows, portal]
+    environment: production
+    concurrency:
+      group: deploy-portal
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: ${{ runner.temp }}/dist
+      - name: Update the portal folder, install the app, restart, health check
+        shell: cmd  # -ExecutionPolicy Bypass: Windows blocks unsigned scripts by default
+        run: >-
+          powershell -NoProfile -ExecutionPolicy Bypass -File deploy_portal.ps1
+          -PortalDir "${{ vars.PORTAL_DIR }}"
+          -Dist "${{ runner.temp }}/dist"
+          -Commit "${{ github.sha }}"

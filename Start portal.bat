@@ -21,4 +21,4 @@ if errorlevel 1 (
 )
 
 :open
-start "" "http://localhost:8000/Pak%%20Climate.html"
+start "" "http://localhost:8000/"

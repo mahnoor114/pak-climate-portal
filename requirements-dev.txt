@@ -1,0 +1,3 @@
+# Extra packages for the tests (tests/), used by the CI pipeline.
+pytest==8.3.4
+httpx==0.28.1

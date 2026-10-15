@@ -13,6 +13,11 @@ lib/*.tmp
 lib/pak_forecast_cache.json
 lib/aq_cache.json
 
+# Frontend packages and build output: build_frontend.ps1 (or the CI/CD pipeline) builds dist/, which the server serves
+node_modules/
+dist/
+.pytest_cache/
+
 # Large source data (the portal uses the simplified lib/districts.js)
 Pakistan_Districts.geojson
 

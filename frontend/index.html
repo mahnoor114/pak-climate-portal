@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pakistan Climate Driver Intelligence Dashboard</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%8C%90%3C/text%3E%3C/svg%3E">
+<!-- Portal data, loaded at run time from the server's lib/ folder (not bundled): indices.js is rewritten by the
+     server's daily refresh, so a new copy shows up on reload without rebuilding the app. -->
+<script src="/lib/earth.js"></script>
+<script src="/lib/boundaries.js"></script>
+<script src="/lib/indices.js"></script>
+<script src="/lib/countries.js"></script>
+<script src="/lib/pak_boundary.js"></script>
+<script src="/lib/districts.js"></script>
+<script>
+// The data files declare top-level consts; hand them to the app in one object (a missing file leaves null).
+window.PORTAL_DATA={
+ EARTH_TEX:typeof EARTH_TEX!=='undefined'?EARTH_TEX:null,
+ BOUND_TEX:typeof BOUND_TEX!=='undefined'?BOUND_TEX:null,
+ CLIMATE_DATA:typeof CLIMATE_DATA!=='undefined'?CLIMATE_DATA:null,
+ COUNTRIES:typeof COUNTRIES!=='undefined'?COUNTRIES:null,
+ PAK_BOUNDARY:typeof PAK_BOUNDARY!=='undefined'?PAK_BOUNDARY:null,
+ DISTRICTS:typeof DISTRICTS!=='undefined'?DISTRICTS:null
+};
+</script>
+</head>
+<body>
+<div id="root"></div>
+<script type="module" src="/src/main.jsx"></script>
+</body>
+</html>

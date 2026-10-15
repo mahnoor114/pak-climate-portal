@@ -48,4 +48,4 @@ Write-Host "  browser at login: $([bool]$OpenBrowserAtLogin)"
 
 # Start it now as well (hidden), so you don't have to log out and in.
 Start-Process -FilePath $Shell -ArgumentList "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$Launcher`"" -WindowStyle Hidden
-Write-Host "Portal starting in the background - open http://localhost:8000/Pak%20Climate.html in about 30 seconds."
+Write-Host "Portal starting in the background - open http://localhost:8000/ in about 30 seconds."

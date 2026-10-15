@@ -1,6 +1,6 @@
 """Serve the dashboard and its AI assistant.
 
-Run:  python portal_server.py        then open http://localhost:8000/Pak%20Climate.html
+Run:  python portal_server.py        then open http://localhost:8000/
 
 The page itself is static. This server adds one endpoint, POST /api/chat, which forwards the
 question to Claude together with the portal's data (lib/indices.js) and a snapshot of what the
@@ -374,7 +374,7 @@ def get_forecast(lat, lon):
 # Refreshed in the background every 8 h (~1,600 calls/day); the page draws it as a smooth colour map clipped to the boundary.
 PAK_GRID = dict(lat0=23.5, lon0=60.75, step=0.75, ny=20, nx=26)   # 23.5-37.75°N, 60.75-79.5°E
 PAK_CACHE = os.path.join(ROOT, 'lib', 'pak_forecast_cache.json')
-PAK_CITIES = {  # name: (lat, lon) - same as FC_CITIES in Pak Climate.html
+PAK_CITIES = {  # name: (lat, lon) - same as FC_CITIES in frontend/src/core/constants.js
     'Islamabad': (33.69, 73.05), 'Lahore': (31.55, 74.34), 'Karachi': (24.86, 67.01), 'Peshawar': (34.01, 71.58),
     'Quetta': (30.18, 66.99), 'Multan': (30.20, 71.47), 'Faisalabad': (31.42, 73.08), 'Hyderabad': (25.40, 68.37),
     'Sukkur': (27.70, 68.86), 'Gwadar': (25.13, 62.32), 'Muzaffarabad': (34.37, 73.47), 'Gilgit': (35.92, 74.31),
@@ -642,11 +642,37 @@ def static_file(path):
         if hit and hit['mtime'] == mtime:
             hit['checked'] = now
             return hit['data'], mtime
-    with open(path, 'rb') as f:
-        data = f.read()
+    try:
+        with open(path, 'rb') as f:
+            data = f.read()
+    except OSError:  # a folder, or removed meanwhile
+        return None
     with _static_lock:
         _static[path] = {'mtime': mtime, 'data': data, 'checked': now}
     return data, mtime
+
+
+DIST = os.path.join(ROOT, 'dist')  # the React app (source in frontend/), built by build_frontend.ps1
+OLD_PAGES = ('pak climate.html',)  # the pre-React page; its address now redirects to the app
+
+
+def static_lookup(url_path):
+    """URL path -> (bytes, mtime, file path) or None. '/' is the app's index.html; other paths are files under
+    ROOT (lib/ data files, which the server refreshes) or under dist/ (the app's built assets)."""
+    rel = urllib.parse.unquote(url_path).lstrip('/')
+    if rel in ('', 'index.html'):
+        rel = 'index.html'
+        bases = (DIST,)
+    else:
+        bases = (DIST, ROOT) if rel.startswith('assets/') else (ROOT, DIST)
+    for base in bases:
+        full = os.path.normpath(os.path.join(base, rel))
+        if not full.startswith(base + os.sep) or os.path.basename(full).lower() == 'groc api.txt':
+            continue
+        got = static_file(full)
+        if got:
+            return got + (full,)
+    return None
 
 
 class Handler(SimpleHTTPRequestHandler):
@@ -654,15 +680,18 @@ class Handler(SimpleHTTPRequestHandler):
         super().__init__(*a, directory=ROOT, **kw)
 
     def send_head(self):
-        """Serve regular files from the in-memory cache (with ETag revalidation); defer everything else."""
-        path = self.translate_path(self.path)
-        if not os.path.basename(path) or os.path.isdir(path):
-            return super().send_head()
-        got = static_file(path)
+        """Serve the app and lib/ files from the in-memory cache (with ETag revalidation)."""
+        url_path = urllib.parse.urlsplit(self.path).path
+        if urllib.parse.unquote(url_path).lstrip('/').lower() in OLD_PAGES:
+            self.send_response(301)
+            self.send_header('Location', '/')
+            self.end_headers()
+            return None
+        got = static_lookup(url_path)
         if got is None:
             self.send_error(404, 'File not found')
             return None
-        data, mtime = got
+        data, mtime, path = got
         etag = f'"{int(mtime * 1000):x}-{len(data):x}"'
         if self.headers.get('If-None-Match') == etag:
             self.send_response(304)
@@ -845,7 +874,7 @@ def answer_claude(history):
 
 def start_background():
     """Startup notes, database backfill of what is on disk, and the background refresh threads."""
-    print(f'Portal: http://localhost:{PORT}/Pak%20Climate.html', flush=True)
+    print(f'Portal: http://localhost:{PORT}/', flush=True)
     if not os.environ.get('ANTHROPIC_API_KEY'):
         print('Note: ANTHROPIC_API_KEY is not set - the Claude assistant will only work with an `ant auth login` profile.', flush=True)
     if not os.environ.get('XAI_API_KEY'):

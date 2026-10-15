@@ -1,6 +1,6 @@
 """Pakistan Climate portal - FastAPI server.
 
-Run:  python portal_api.py          then open http://localhost:8000/Pak%20Climate.html
+Run:  python portal_api.py          then open http://localhost:8000/
 API documentation (interactive): http://localhost:8000/docs
 
 All data logic (caching, database, Open-Meteo / NOAA / NASA downloads, AI assistant) lives in portal_server.py;
@@ -116,21 +116,15 @@ async def chat(req: ChatRequest):
     return StreamingResponse(stream(), media_type='text/event-stream', headers={'Cache-Control': 'no-cache'})
 
 
-@app.get('/', include_in_schema=False)
-async def home():
-    return RedirectResponse('/Pak%20Climate.html')
-
-
 @app.get('/{path:path}', include_in_schema=False)
 async def static(path: str, request: Request):
-    """The portal's pages and lib/ files, from the same in-memory cache as before (with ETag revalidation)."""
-    full = os.path.normpath(os.path.join(core.ROOT, path))
-    if not full.startswith(core.ROOT) or os.path.isdir(full) or os.path.basename(full).lower() in ('groc api.txt',):
-        raise HTTPException(404)
-    got = await run_in_threadpool(core.static_file, full)
+    """The React app (dist/, '/' = its index.html) and lib/ files, from the in-memory cache (with ETag revalidation)."""
+    if path.lower() in core.OLD_PAGES:  # the pre-React page's address
+        return RedirectResponse('/', status_code=301)
+    got = await run_in_threadpool(core.static_lookup, path)
     if got is None:
         raise HTTPException(404)
-    data, mtime = got
+    data, mtime, full = got
     etag = f'"{int(mtime * 1000):x}-{len(data):x}"'
     if request.headers.get('if-none-match') == etag:
         return Response(status_code=304, headers={'ETag': etag})

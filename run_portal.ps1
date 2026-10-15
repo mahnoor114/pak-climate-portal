@@ -27,7 +27,7 @@ $App     = Join-Path $Base 'app'                                # local working 
 $LogDir  = Join-Path $Base 'logs'                               # local: a stalled network drive must not block logging
 $Port    = if ($env:PORTAL_PORT) { [int]$env:PORTAL_PORT } else { 8000 }
 $Health  = "http://127.0.0.1:$Port/api/ai-status"
-$PageUrl = "http://localhost:$Port/Pak%20Climate.html"
+$PageUrl = "http://localhost:$Port/"
 New-Item -ItemType Directory -Force -Path $App, $LogDir | Out-Null
 $WatchLog = Join-Path $LogDir 'watchdog.log'
 
@@ -54,7 +54,7 @@ function Sync-App {
     $rcLog = Join-Path $LogDir 'last_copy.log'
     $rc = Start-Process -FilePath robocopy.exe -WindowStyle Hidden -PassThru -RedirectStandardOutput $rcLog -ArgumentList @(
         "`"$Source`"", "`"$App`"", '/E', '/XO', '/R:1', '/W:2', '/NFL', '/NDL', '/NJH', '/NJS', '/NP',
-        '/XD', 'logs', 'backups', '.git', '__pycache__',
+        '/XD', 'logs', 'backups', '.git', '__pycache__', 'node_modules',
         '/XF', '"groc api.txt"', '*.tmp', '*.zip', 'Pakistan_Districts.geojson')
     if (-not $rc.WaitForExit(180000)) {
         Stop-Process -Id $rc.Id -Force -ErrorAction SilentlyContinue
