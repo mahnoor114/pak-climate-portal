@@ -42,7 +42,7 @@ NO_XAI_KEY = ('Grok is not connected yet: no xAI API key found. Set XAI_API_KEY 
 NO_KEY = ('The AI assistant is not connected yet: no Claude API key found. Set ANTHROPIC_API_KEY '
           '(or run `ant auth login`) and restart portal_server.py.')
 
-PORTAL_GUIDE = """You are the built-in assistant of the "Pakistan Climate Driver Intelligence" dashboard, a prototype
+PORTAL_GUIDE = """You are the built-in assistant of the "Pakistan Climate Intelligence" dashboard, a prototype
 early-warning portal that tracks the large-scale climate drivers behind Pakistan's weather. Answer
 questions about the portal: what it shows, what the current numbers mean, how they are computed,
 where the data comes from, and how to use it.

@@ -10,8 +10,8 @@ export function TopBar({ mode, setMode, aiOpen, toggleAi, openForecast }) {
   return (
     <div className="topbar">
       <div className="brand">
-        <div className="brandmark">CD</div>
-        <div><div className="title">Pakistan Climate Driver Intelligence</div><div className="subtitle">National weather influence &amp; early-warning dashboard • Prototype</div></div>
+        <div className="brandmark">CI</div>
+        <div><div className="title">Pakistan Climate Intelligence</div><div className="subtitle">National weather influence &amp; early-warning dashboard • Prototype</div></div>
       </div>
       <div className="status">
         <div className="pill pill-info"><span className="dot"></span><span className="live">SYSTEM ONLINE</span></div>

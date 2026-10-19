@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🌐 Pakistan Climate Driver Intelligence
+# 🌐 Pakistan Climate Intelligence
 
 **A live dashboard that tracks the global climate drivers behind Pakistan's weather and turns them into an early-warning view, with 7-day weather and air-quality forecasts down to district level.**
 

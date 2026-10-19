@@ -55,7 +55,7 @@ function puterPrepare() {
   if (!puterReady) puterReady = Promise.all([
     puterScript,
     fetch('/api/guide').then(r => { if (!r.ok) throw 0; return r.json(); }).then(js => { puterGuide = js.text; }) // same instructions + data Claude and Grok get
-      .catch(() => { puterGuide = 'You are the assistant of the Pakistan Climate Driver Intelligence dashboard. Answer only from this data, quoting values with units and months:\n' + JSON.stringify(CLIMATE_DATA || {}); }),
+      .catch(() => { puterGuide = 'You are the assistant of the Pakistan Climate Intelligence dashboard. Answer only from this data, quoting values with units and months:\n' + JSON.stringify(CLIMATE_DATA || {}); }),
   ]).catch(e => { puterReady = null; throw e; });
   return puterReady;
 }
