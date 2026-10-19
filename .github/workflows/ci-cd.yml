@@ -8,7 +8,17 @@ name: CI/CD
 on:
   push:
     branches: [main]
+    paths-ignore:  # documentation-only changes don't need a build or a portal restart
+      - '**.md'
+      - 'docs/**'
+      - '.github/ISSUE_TEMPLATE/**'
+      - '.editorconfig'
   pull_request:
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.github/ISSUE_TEMPLATE/**'
+      - '.editorconfig'
   workflow_dispatch:
 
 jobs:

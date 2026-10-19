@@ -1,0 +1,13 @@
+# Text files are stored with LF line endings; Windows batch files keep CRLF (cmd needs it).
+* text=auto
+*.bat text eol=crlf
+
+# GIS data, archives and images
+*.shp binary
+*.shx binary
+*.dbf binary
+*.sbn binary
+*.sbx binary
+*.qgz binary
+*.jpg binary
+*.png binary

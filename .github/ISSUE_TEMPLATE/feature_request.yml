@@ -1,0 +1,20 @@
+name: Feature or data request
+description: Suggest a feature, a climate driver or a data source
+labels: [enhancement]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would you like
+      description: The feature or data, and who it would help.
+    validations:
+      required: true
+  - type: input
+    id: source
+    attributes:
+      label: Data source (if any)
+      placeholder: Link to the dataset or API
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else

@@ -1,0 +1,37 @@
+name: Bug report
+description: Something in the portal is wrong or broken
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you saw, and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open the Forecast window
+        2. Pick "Smog: PM10" and Saturday
+        3. …
+    validations:
+      required: true
+  - type: dropdown
+    id: view
+    attributes:
+      label: Where
+      options: [2D map, 3D globe, 3D terrain, Forecast map, City / point forecast, Driver card, AI assistant, Server / API, Other]
+    validations:
+      required: true
+  - type: input
+    id: browser
+    attributes:
+      label: Browser and device
+      placeholder: Chrome 140 on Windows 11
+  - type: textarea
+    id: extra
+    attributes:
+      label: Screenshots or console errors
