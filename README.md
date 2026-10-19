@@ -25,14 +25,14 @@ It runs as one small Python server. The data is refreshed in the background and 
 
 | | |
 |---|---|
-| 🧭 **Eleven climate drivers** | ENSO, Indian Ocean Dipole, MJO, Arabian Sea and Bay of Bengal SST, western disturbances, jet stream, Tibetan Plateau, Arctic and North Atlantic Oscillations, Eurasian snow. Each one has its region on the map and a live satellite or model layer. |
-| 📊 **Influence scores** | Monsoon, winter precipitation, heat risk and flood-supporting signal, each 0–100 (50 = normal). They are built from each driver's standardized anomaly against its 1991–2020 climate, with a 12-month trend and each driver's share of the current signal. |
-| 🛰 **Live layers** | NASA GIBS satellite tiles (sea-surface temperature and anomaly, precipitation, snow, vegetation, true colour) and animated GFS upper-level winds at 250 and 500 hPa, drawn like earth.nullschool. |
-| 🌍 **Three map views** | 2D analytical map, a 3D satellite globe with arcs from each driver to Pakistan, and 3D terrain of Pakistan's mountains with live rain, snow, sky and sun that follow the forecast where the camera looks. |
-| 🌦 **Forecast map** | 7-day rain, chance of rain, temperature and wind, plus 5-day AQI, PM2.5, PM10, aerosol and dust for all of Pakistan, clipped to the official boundary. Hover for district averages across all 167 districts; click anywhere for that spot's full forecast. |
-| 📍 **City and point forecasts** | Current conditions, a 7-day outlook, a 48-hour chart and air quality with health advice, for 14 cities, any district or any clicked point. |
-| 🔬 **Driver analysis cards** | The latest value, its change and phase (El Niño / La Niña, positive / negative IOD…), the observed series chart and its data source. |
-| ✨ **AI assistant** | Ask about the portal in English or Urdu. Claude or Grok answers from the portal's own data and from what is on your screen. It works through the server with an API key, or free through Puter without one. |
+| **Eleven climate drivers** | ENSO, Indian Ocean Dipole, MJO, Arabian Sea and Bay of Bengal SST, western disturbances, jet stream, Tibetan Plateau, Arctic and North Atlantic Oscillations, Eurasian snow. Each one has its region on the map and a live satellite or model layer. |
+| **Influence scores** | Monsoon, winter precipitation, heat risk and flood-supporting signal, each 0–100 (50 = normal). They are built from each driver's standardized anomaly against its 1991–2020 climate, with a 12-month trend and each driver's share of the current signal. |
+| **Live layers** | NASA GIBS satellite tiles (sea-surface temperature and anomaly, precipitation, snow, vegetation, true colour) and animated GFS upper-level winds at 250 and 500 hPa, drawn like earth.nullschool. |
+| **Three map views** | 2D analytical map, a 3D satellite globe with arcs from each driver to Pakistan, and 3D terrain of Pakistan's mountains with live rain, snow, sky and sun that follow the forecast where the camera looks. |
+| **Forecast map** | 7-day rain, chance of rain, temperature and wind, plus 5-day AQI, PM2.5, PM10, aerosol and dust for all of Pakistan, clipped to the official boundary. Hover for district averages across all 167 districts; click anywhere for that spot's full forecast. |
+| **City and point forecasts** | Current conditions, a 7-day outlook, a 48-hour chart and air quality with health advice, for 14 cities, any district or any clicked point. |
+| **Driver analysis cards** | The latest value, its change and phase (El Niño / La Niña, positive / negative IOD…), the observed series chart and its data source. |
+| **AI assistant** | Ask about the portal in English or Urdu. Claude or Grok answers from the portal's own data and from what is on your screen. It works through the server with an API key, or free through Puter without one. |
 
 ## Screenshots
 
