@@ -1,15 +1,15 @@
 <#
 Makes sure the portal fetches fresh weather every day, even when this PC is asleep: a scheduled task wakes the PC
-daily (default 06:00) and runs wake_refresh.ps1, which keeps it awake until the weather, air-quality and wind
+daily (default 10:00) and runs wake_refresh.ps1, which keeps it awake until the weather, air-quality and wind
 data are refreshed, then lets it sleep again.
   - Wakes only on mains power (wake timers are allowed for "plugged in" only), never on battery.
   - Can't wake a PC that is shut down; it runs at the next start instead.
   - Runs the local copy of wake_refresh.ps1 that the portal watchdog keeps in
     %LOCALAPPDATA%\PakClimatePortal\app, so it doesn't depend on the network drive after waking.
-  powershell -ExecutionPolicy Bypass -File install_daily_refresh.ps1 [-At 06:00]
+  powershell -ExecutionPolicy Bypass -File install_daily_refresh.ps1 [-At 10:00]
   powershell -ExecutionPolicy Bypass -File install_daily_refresh.ps1 -Remove
 #>
-param([string]$At = '06:00', [switch]$Remove)
+param([string]$At = '10:00', [switch]$Remove)
 $ErrorActionPreference = 'Stop'
 $TaskName = 'Pakistan Climate Portal - daily refresh'
 

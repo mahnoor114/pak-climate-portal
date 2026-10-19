@@ -1,6 +1,6 @@
 <#
 Daily refresh while the PC would otherwise be asleep. The scheduled task from install_daily_refresh.ps1 wakes the
-PC every morning and runs this script, which keeps it awake until the portal has refreshed its weather forecast,
+PC every day at 10:00 and runs this script, which keeps it awake until the portal has refreshed its weather forecast,
 air-quality and wind data (they are saved to its cache and the database as they arrive), then lets it sleep again.
 The portal's own refresh threads do the downloading; this only keeps the PC awake long enough for them to run.
 Log: %LOCALAPPDATA%\PakClimatePortal\logs\daily_refresh.log
