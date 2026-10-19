@@ -48,19 +48,25 @@ It runs as one small Python server. The data is refreshed in the background and 
 
 ```mermaid
 flowchart LR
-    subgraph Sources
-        A[NOAA PSL / CPC<br>NASA POWER<br>Rutgers Snow Lab]
-        B[Open-Meteo<br>GFS and forecasts]
-        C[Copernicus CAMS<br>air quality]
+    subgraph SRC["Data sources"]
+        A["NOAA PSL and CPC<br/>NASA POWER<br/>Rutgers Snow Lab"]
+        B["Open-Meteo<br/>GFS winds and forecasts"]
+        C["Copernicus CAMS<br/>air quality"]
     end
-    subgraph Server["Python server (FastAPI)"]
-        D[Background refresh<br>climate daily · weather 8 h · air 12 h]
-        E[(Cache: memory, disk,<br>PostgreSQL optional)]
-        F[REST API /api/*]
+    subgraph SRV["Python server - FastAPI"]
+        D["Background refresh<br/>climate daily, weather 8 h, air 12 h"]
+        E[("Cache<br/>memory, disk, PostgreSQL")]
+        F["REST API"]
     end
-    G[React app<br>Leaflet · Three.js · Mapbox GL · Chart.js]
-    A & B & C --> D --> E --> F --> G
-    H[NASA GIBS · Mapbox · Esri<br>map tiles] --> G
+    G["React app<br/>Leaflet, Three.js, Mapbox GL, Chart.js"]
+    H["Map tiles<br/>NASA GIBS, Mapbox, Esri"]
+    A --> D
+    B --> D
+    C --> D
+    D --> E
+    E --> F
+    F --> G
+    H --> G
 ```
 
 - **Refresh, then serve.** Background threads download each dataset on a schedule. Every request is answered from the cache, and when an outside service is down the last good copy is shown, marked as stale.
