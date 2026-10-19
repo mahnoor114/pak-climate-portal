@@ -39,7 +39,7 @@ It runs as one small Python server. The data is refreshed in the background and 
 | 3D globe | 3D terrain with live weather |
 |---|---|
 | ![3D globe](docs/screenshots/globe-3d.jpg) | ![3D terrain](docs/screenshots/terrain-3d.jpg) |
-| **Forecast map: PM10 by district** | **City forecast over the map** |
+| **Forecast map: PM10 by district** | **City forecast, full screen** |
 | ![Forecast map](docs/screenshots/forecast-map.jpg) | ![City forecast](docs/screenshots/forecast-city.jpg) |
 | **Upper-level winds (500 hPa)** | **Driver analysis: jet stream** |
 | ![Winds](docs/screenshots/wind.jpg) | ![Driver card](docs/screenshots/driver-card.jpg) |
