@@ -135,9 +135,13 @@ PORTAL DATA FILE (lib/indices.js, JSON; each series has labels, values, z, unit,
 """
 
 
-def load_data():
-    with open(INDICES, encoding='utf-8') as f:
-        txt = f.read()
+def load_data(recheck=None):
+    """The climate series (lib/indices.js) as JSON text, from the in-memory file cache (see static_file).
+    recheck=0 reads the file as it is now (right after the daily download rewrote it)."""
+    got = static_file(INDICES, recheck)
+    if got is None:
+        raise FileNotFoundError(INDICES)
+    txt = got[0].decode('utf-8')
     m = re.search(r'=\s*(\{.*\})\s*;?\s*$', txt, re.S)
     return m.group(1) if m else txt
 
@@ -228,15 +232,12 @@ def _fetch_wind():
     return {'fetched': dt.datetime.now(dt.timezone.utc).strftime('%Y-%m-%d %H:%M UTC'), 'model_time': model_time,
             'grid': WG, 'd': d, 'region': {'grid': WG_REGION, 'd': region}}
 
-def _read_cache():
-    """Return (payload, age_seconds) for a cache matching the current grid, else (None, None)."""
-    try:
-        with open(WIND_CACHE, encoding='utf-8') as f:
-            cached = json.load(f)
-        if cached.get('grid') == WG:  # a copy without the regional grid still serves; the refresher adds it
-            return cached, time.time() - os.path.getmtime(WIND_CACHE)
-    except (OSError, ValueError):
-        pass
+def _read_cache(recheck=None):
+    """Return (payload, age_seconds) for a cache matching the current grid, else (None, None).
+    From memory (json_file); the refresher passes recheck=0 to see a file it has just written."""
+    got = json_file(WIND_CACHE, recheck)
+    if got and got[0].get('grid') == WG:  # a copy without the regional grid still serves; the refresher adds it
+        return got[0], time.time() - got[1]
     return None, None
 
 
@@ -247,10 +248,10 @@ def _refresh_wind_forever():
     """Background thread: keep lib/wind_cache.json fresh without ever making a page wait."""
     global _wind_status
     while True:
-        cached, age = _read_cache()
+        cached, age = _read_cache(0)
         if cached is None or age >= WIND_MAX_AGE:
             _db_restore('wind', WIND_CACHE)
-            cached, age = _read_cache()
+            cached, age = _read_cache(0)
         if cached is None or age >= WIND_MAX_AGE or cached.get('region', {}).get('grid') != WG_REGION:
             try:
                 fresh = _fetch_wind()
@@ -455,14 +456,10 @@ def _refresh_pak_grid_forever():
 
 
 def get_pak_grid():
-    try:
-        with open(PAK_CACHE, encoding='utf-8') as f:
-            payload = json.load(f)
-        if payload.get('grid') == PAK_GRID:
-            payload['stale'] = time.time() - os.path.getmtime(PAK_CACHE) >= PAK_MAX_AGE
-            return payload, None
-    except (OSError, ValueError):
-        pass
+    """Whole-Pakistan forecast grid: from memory (json_file), else the database copy."""
+    got = json_file(PAK_CACHE)
+    if got and got[0].get('grid') == PAK_GRID:
+        return dict(got[0], stale=time.time() - got[1] >= PAK_MAX_AGE), None
     return _db_grid('weather_grid', PAK_MAX_AGE) or (None, _pak_status)
 
 
@@ -567,14 +564,10 @@ def _refresh_aq_forever():
 
 
 def get_aq_grid():
-    try:
-        with open(AQ_CACHE, encoding='utf-8') as f:
-            payload = json.load(f)
-        if payload.get('grid') == PAK_GRID:
-            payload['stale'] = time.time() - os.path.getmtime(AQ_CACHE) >= AQ_MAX_AGE
-            return payload, None
-    except (OSError, ValueError):
-        pass
+    """Whole-Pakistan air-quality grid: from memory (json_file), else the database copy."""
+    got = json_file(AQ_CACHE)
+    if got and got[0].get('grid') == PAK_GRID:
+        return dict(got[0], stale=time.time() - got[1] >= AQ_MAX_AGE), None
     return _db_grid('air_quality_grid', AQ_MAX_AGE) or (None, _aq_status)
 
 
@@ -601,7 +594,7 @@ def _refresh_climate_data_forever():
             print('Refreshing climate data (NOAA, NASA, Rutgers)...', flush=True)
             try:
                 update_data.update()
-                portal_db.enqueue('climate', json.loads(load_data()))
+                portal_db.enqueue('climate', json.loads(load_data(0)))
             except Exception as e:  # keep the last good file; try again in an hour
                 print(f'Climate data refresh failed: {e}', flush=True)
                 time.sleep(3600)
@@ -626,12 +619,14 @@ _static = {}  # path -> {'mtime', 'data', 'checked'}
 _static_lock = threading.Lock()
 
 
-def static_file(path):
-    """Return (bytes, mtime) for a file under ROOT, or None if it doesn't exist."""
+def static_file(path, recheck=None):
+    """Return (bytes, mtime) for a file under ROOT, or None if it doesn't exist. recheck=0 checks the disk now."""
+    if recheck is None:
+        recheck = STATIC_RECHECK
     now = time.time()
     with _static_lock:
         hit = _static.get(path)
-        if hit and now - hit['checked'] < STATIC_RECHECK:
+        if hit and now - hit['checked'] < recheck:
             return hit['data'], hit['mtime']
     try:
         mtime = os.path.getmtime(path)
@@ -650,6 +645,27 @@ def static_file(path):
     with _static_lock:
         _static[path] = {'mtime': mtime, 'data': data, 'checked': now}
     return data, mtime
+
+
+_parsed = {}  # path -> (mtime, parsed JSON)
+
+
+def json_file(path, recheck=None):
+    """(parsed JSON, mtime) of a data file, kept in memory and parsed again only when the file changes
+    (the forecast, air-quality and wind grids are rewritten by their refreshers). None if missing or invalid."""
+    got = static_file(path, recheck)
+    if got is None:
+        return None
+    data, mtime = got
+    hit = _parsed.get(path)
+    if hit and hit[0] == mtime:
+        return hit[1], mtime
+    try:
+        obj = json.loads(data)
+    except ValueError:  # half-written; the next check reads the finished file
+        return None
+    _parsed[path] = (mtime, obj)
+    return obj, mtime
 
 
 DIST = os.path.join(ROOT, 'dist')  # the React app (source in frontend/), built by build_frontend.ps1
