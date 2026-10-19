@@ -93,7 +93,7 @@ python portal_api.py
 
 Open **http://localhost:8000**. The first start downloads the climate series and forecast grids, which takes about a minute. Interactive API documentation is at **http://localhost:8000/docs**.
 
-On Windows, `Start portal.bat` does the same and opens the browser. `Install autostart.bat` keeps the portal running in the background from login, restarting it if it stops.
+On Windows, `Start portal.bat` does the same and opens the browser. `Install autostart.bat` keeps the portal running in the background from login, restarting it if it stops. `Install daily refresh.bat` wakes the PC from sleep every morning (when it is plugged in), so the data is refreshed every day even when nobody is using the PC.
 
 ### Configuration
 
